@@ -48,3 +48,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build server image
         run: docker build -t agentrum/server:${{ github.sha }} .
+      - name: Validate Helm chart
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm template ci charts/agentrum \
+            --set database.url="postgresql+asyncpg://u:p@h:5432/agentrum" \
+            --set auth.secretKey=ci --set auth.bootstrapAdminPassword=ci >/dev/null
+
+  docs:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "mkdocs-material[imaging]" mkdocs-static-i18n
+      - run: mkdocs gh-deploy --force

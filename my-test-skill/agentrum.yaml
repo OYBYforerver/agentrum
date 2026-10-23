@@ -1,0 +1,10 @@
+kind: Skill
+metadata:
+  name: my-test-skill
+  namespace: default
+  labels: {}
+spec:
+  entrypoint: SKILL.md
+  instructions: 'TODO: how to use this skill'
+description: 'TODO: skill summary'
+tag: v0.1.0

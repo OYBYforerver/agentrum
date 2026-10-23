@@ -1,0 +1,75 @@
+# Default values for agentrum.
+replicaCount: 2
+
+image:
+  repository: ghcr.io/agentrum/agentrum
+  tag: ""  # defaults to chart appVersion
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  tls:
+    enabled: false
+    secretName: ""
+
+database:
+  # Use an external, HA PostgreSQL in production (cloud RDS / Patroni).
+  # "bundled" deploys a single-pod Postgres for evaluation only.
+  type: external
+  url: ""  # postgresql+asyncpg://user:pass@host:5432/agentrum
+  existingSecret: ""  # alternative: secret with key AGENT_REGISTRY_DATABASE_URL
+
+auth:
+  secretKey: ""  # JWT signing key; REQUIRED. Create via --set or existing secret.
+  existingSecret: ""  # secret with key ARK_SECRET_KEY
+  bootstrapAdminUsername: admin
+  bootstrapAdminPassword: ""  # REQUIRED on first install
+  # SSO (OIDC). Set provider config to enable login buttons.
+  oidcGenericIssuer: ""
+  oidcGenericClientId: ""
+  oidcGenericClientSecret: ""
+  feishuAppId: ""
+  feishuAppSecret: ""
+  redirectBase: ""   # public base URL of the API (for OIDC callbacks)
+  uiOrigin: ""       # public origin of the UI
+
+secrets:
+  # Envelope encryption key for Secret resources (Fernet, 32-byte urlsafe b64)
+  encryptionKey: ""
+  existingSecret: ""
+
+deploy:
+  # Image registry allowlist for the deployment controller. REQUIRED in prod:
+  # e.g. "registry.internal/,ghcr.io/acme/". Empty = allow all (dev only).
+  imageAllowlist: ""
+  serviceAccount: ""  # SA used by deployed workloads (least privilege)
+
+notifications:
+  feishuWebhookUrl: ""
+  feishuWebhookSecret: ""
+
+observability:
+  logFormat: json
+  otelEnabled: false
+  otelEndpoint: ""
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: [agentrum]
+          topologyKey: kubernetes.io/hostname

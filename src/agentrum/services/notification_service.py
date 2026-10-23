@@ -90,15 +90,15 @@ async def list_consumers(
     team = await team_service.get_team(session, team_name)
     rows = (
         await session.execute(
-            select(models.Team.name, models.Subscription)
-            .join(models.Namespace, models.Namespace.team_id == team.id)
-            .join(
-                models.Subscription,
-                (models.Subscription.namespace == models.Namespace.name),
-            )
+            select(models.Subscription, models.Team)
+            .select_from(models.Subscription)
             .join(models.Team, models.Team.id == models.Subscription.subscriber_team_id)
-            .where(models.Subscription.status == models.SUB_ACTIVE)
+            .join(models.Namespace, models.Namespace.name == models.Subscription.namespace)
+            .where(
+                models.Namespace.team_id == team.id,
+                models.Subscription.status == models.SUB_ACTIVE,
+            )
             .order_by(models.Team.name)
         )
     ).all()
-    return rows
+    return [(t.name, s) for s, t in rows]

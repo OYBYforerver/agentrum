@@ -84,7 +84,10 @@ async def reconcile_tick(session, adapter: DeploymentAdapter) -> int:
 
         if row.deleted_at is not None:
             plan = _plan_from(row, spec, image="", env={})
-            condition = await adapter.remove(plan)
+            try:
+                condition = await adapter.remove(plan)
+            except Exception as exc:  # noqa: BLE001 - surface adapter failures as conditions
+                condition = _condition(False, f"adapter error: {exc}", reason="AdapterError")
             actions += 1
         else:
             target = await _get_resource(
@@ -120,7 +123,12 @@ async def reconcile_tick(session, adapter: DeploymentAdapter) -> int:
                         condition = _condition(False, str(exc), reason="EnvResolutionFailed")
                     else:
                         plan = _plan_from(row, spec, image=image, env=env)
-                        condition = await adapter.apply(plan)
+                        try:
+                            condition = await adapter.apply(plan)
+                        except Exception as exc:  # noqa: BLE001 - surfaced as a condition
+                            condition = _condition(
+                                False, f"adapter error: {exc}", reason="AdapterError"
+                            )
                         actions += 1
 
         if condition and (row.status or {}).get("conditions") != [condition]:

@@ -1,0 +1,49 @@
+{
+  "app": {
+    "title": "Agentrum",
+    "tagline": "Publish · Subscribe · Run AI assets"
+  },
+  "login": {
+    "heading": "Sign in",
+    "server": "Registry URL",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "orSso": "or sign in with SSO",
+    "error": "Sign-in failed: {{detail}}"
+  },
+  "nav": { "catalog": "Catalog", "publish": "Publish", "subscriptions": "Subscriptions", "logout": "Sign out" },
+  "catalog": {
+    "search": "Search…",
+    "allKinds": "All kinds",
+    "columns": { "kind": "Kind", "name": "Name", "namespace": "Namespace", "visibility": "Visibility", "tag": "Latest tag", "updated": "Updated" },
+    "empty": "No resources yet.",
+    "restricted": "restricted"
+  },
+  "publish": {
+    "heading": "Publish a resource",
+    "kind": "Kind",
+    "namespace": "Namespace",
+    "name": "Name",
+    "tag": "Tag (immutable)",
+    "visibility": "Visibility",
+    "description": "Description",
+    "spec": "Spec (JSON)",
+    "submit": "Publish",
+    "success": "Published {{kind}} {{namespace}}/{{name}}",
+    "hint": "Secrets use {\"data\": {KEY: VALUE}} — values are encrypted and never returned."
+  },
+  "subs": {
+    "mine": "My team's subscriptions",
+    "pending": "Pending approvals for my namespaces",
+    "subscribe": "New subscription",
+    "targetKind": "Target kind",
+    "targetNamespace": "Target namespace",
+    "targetName": "Target name (* = whole namespace)",
+    "approve": "Approve",
+    "reject": "Reject",
+    "revoke": "Revoke",
+    "status": { "active": "active", "pending_approval": "pending approval", "revoked": "revoked" }
+  },
+  "lang": { "label": "Language" }
+}

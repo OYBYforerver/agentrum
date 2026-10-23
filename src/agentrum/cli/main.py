@@ -178,3 +178,126 @@ def version() -> None:
     """Show server version."""
     resp = httpx.get(f"{_server()}/health", timeout=10)
     typer.echo(json.dumps(resp.json(), ensure_ascii=False))
+
+
+_INIT_TEMPLATES: dict[str, dict] = {
+    "agent": {
+        "kind": "Agent",
+        "metadata": {"name": "my-agent", "namespace": "default", "labels": {}},
+        "spec": {"image": "registry.internal/my-agent:0.1.0", "framework": "langgraph"},
+        "description": "TODO: what does this agent do",
+        "tag": "v0.1.0",
+    },
+    "mcp-server": {
+        "kind": "MCPServer",
+        "metadata": {"name": "my-server", "namespace": "default", "labels": {}},
+        "spec": {"transport": "streamable-http", "endpoint": "http://localhost:3000/mcp"},
+        "description": "TODO: tools exposed by this MCP server",
+        "tag": "v0.1.0",
+    },
+    "skill": {
+        "kind": "Skill",
+        "metadata": {"name": "my-skill", "namespace": "default", "labels": {}},
+        "spec": {"entrypoint": "SKILL.md", "instructions": "TODO: how to use this skill"},
+        "description": "TODO: skill summary",
+        "tag": "v0.1.0",
+    },
+    "prompt": {
+        "kind": "Prompt",
+        "metadata": {"name": "my-prompt", "namespace": "default", "labels": {}},
+        "spec": {"template": "TODO: prompt template with {{variables}}"},
+        "description": "TODO: prompt purpose",
+        "tag": "v0.1.0",
+    },
+}
+
+
+@app.command()
+def init(
+    kind: str = typer.Argument(..., help="agent | mcp-server | skill | prompt"),
+    name: str = typer.Argument(..., help="project/resource name"),
+) -> None:
+    """Scaffold a new asset project (agentrum.yaml + README stub)."""
+    if kind not in _INIT_TEMPLATES:
+        typer.echo(f"kind must be one of: {', '.join(_INIT_TEMPLATES)}", err=True)
+        raise typer.Exit(1)
+    target = Path(name)
+    if target.exists():
+        typer.echo(f"directory {name} already exists", err=True)
+        raise typer.Exit(1)
+    target.mkdir(parents=True)
+    template = json.loads(json.dumps(_INIT_TEMPLATES[kind]))  # deep copy
+    template["metadata"]["name"] = name
+    (target / "agentrum.yaml").write_text(yaml.safe_dump(template, sort_keys=False, allow_unicode=True))
+    (target / "README.md").write_text(
+        f"# {name}\n\nTODO: long description (markdown). Publish with:\n\n"
+        f"    agentrum apply {name}/agentrum.yaml\n"
+    )
+    typer.echo(f"✔ scaffolded {kind} project in {name}/ — edit agentrum.yaml, then: agentrum apply {name}/agentrum.yaml")
+
+
+@app.command()
+def export(
+    output: Path = typer.Option(Path("agentrum-bundle.yaml"), "-o", "--output"),
+    kind: str | None = typer.Option(None, "--kind"),
+    namespace: str | None = typer.Option(None, "-n", "--namespace"),
+) -> None:
+    """Export resources (all versions) as an apply-able YAML bundle.
+
+    Used to promote content between environments (test -> prod registry):
+    point ARK_SERVER/credentials at the target registry and `agentrum apply`
+    the bundle. Secret values are never exported (keys only).
+    """
+    with httpx.Client(base_url=_server(), headers=_headers(), timeout=60) as client:
+        params: dict = {"limit": 200}
+        if kind:
+            params["kind"] = kind
+        if namespace:
+            params["namespace"] = namespace
+        resp = client.get("/v1/resources", params=params)
+        if resp.status_code != 200:
+            typer.echo(resp.text, err=True)
+            raise typer.Exit(1)
+        items = resp.json()["items"]
+        if not items:
+            typer.echo("nothing to export")
+            return
+
+        docs: list[dict] = []
+        secret_count = 0
+        for it in items:
+            if it["kind"] == "Secret":
+                secret_count += 1
+                docs.append(
+                    {
+                        "kind": "Secret",
+                        "metadata": {"name": it["name"], "namespace": it["namespace"]},
+                        "spec": {"data": {}},  # values intentionally omitted
+                        "description": it.get("description"),
+                        "visibility": it["visibility"],
+                        "_note": "SECRET VALUES NOT EXPORTED — re-enter them at the target",
+                    }
+                )
+                continue
+            versions_resp = client.get(
+                f"/v1/resources/{it['kind']}/{it['namespace']}/{it['name']}/versions"
+            )
+            versions = versions_resp.json() if versions_resp.status_code == 200 else []
+            for v in reversed(versions):  # oldest → newest so replay order is correct
+                docs.append(
+                    {
+                        "kind": it["kind"],
+                        "metadata": {"name": it["name"], "namespace": it["namespace"], "labels": it.get("labels") or {}},
+                        "spec": v["spec"],
+                        "tag": v.get("tag"),
+                        "change_notes": v.get("change_notes"),
+                        "description": it.get("description"),
+                        "visibility": it["visibility"],
+                    }
+                )
+        with output.open("w") as fh:
+            yaml.safe_dump_all(docs, fh, sort_keys=False, allow_unicode=True)
+        typer.echo(
+            f"✔ exported {len(docs)} document(s) from {len(items)} resource(s) "
+            f"({secret_count} secret(s) value-stripped) -> {output}"
+        )

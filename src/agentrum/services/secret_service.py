@@ -88,7 +88,7 @@ async def resolve_env(
         if entry.get("value") is not None:
             resolved[name] = entry["value"]
             continue
-        ref = entry.get("value_from") or {}
+        ref = entry.get("value") is None and (entry.get("value_from") or {}).get("secret_ref") or {}
         namespace = ref.get("namespace") or default_namespace
         secret = await _get_resource(session, "Secret", namespace, ref.get("name", ""))
         if secret is None:

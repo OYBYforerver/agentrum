@@ -14,6 +14,12 @@ build/
 .coverage
 htmlcov/
 
+# Node / UI
+node_modules/
+ui/.next/
+ui/out/
+.next/
+
 # Environment
 .env
 .env.local

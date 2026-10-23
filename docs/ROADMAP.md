@@ -1,6 +1,8 @@
 # Agentrum 路线图(定稿)
 
-> 决策记录:通知渠道 = 飞书;资源发布即生效(无发布审批);UI = React/Next.js + react-i18next 双语;部署目标 = **K8s 集群**(原生适配器优先,Docker 仅作本地开发模式);身份 = **标准 OIDC 协议 + 飞书作为 Provider 配置**(开源通用,企业配飞书,社区配任意 OIDC IdP);本地账号保留为 bootstrap 兜底。
+> 状态(2026-10-24):**阶段 A/B/C 主体全部落地**,版本 0.2.0。诚实标注三处待真环境验证:K8s 部署控制器未在真实集群上跑通(逻辑经单测与本地 Postgres 调和验证);OIDC 完整握手需真实 IdP(端点/流程按标准与飞书文档实现);UI 为功能完整的 v0(目录/发布/订阅/审批/双语),深度打磨留待试点反馈。
+
+## 决策记录
 
 ## 阶段 A — 内部试运行可用(进行中)
 
@@ -19,27 +21,26 @@
 | CLI 基础命令(login / apply / get / delete / version) | ✅ |
 | 资源模型增强研究 | ✅ 结论见 [RESEARCH-resource-model.md](RESEARCH-resource-model.md):P0 = 目录元数据 + env.secretRef + 版本 changelog(部署控制器前置) |
 
-## 阶段 B — 集群生产
+## 阶段 B — 集群生产 ✅(2026-10-24)
 
-- 资源模型增强(P0,部署控制器前置):目录元数据(icon/category/docs/authors/license/long_description/examples)、`env[].valueFrom.secretRef` 引用模式、版本 `change_notes` —— 详见 [RESEARCH-resource-model.md](RESEARCH-resource-model.md)
-- OIDC SSO(authlib,Provider 抽象;飞书 profile + 任意标准 OIDC)
-- K8s 部署控制器:`kubernetes-asyncio` 原生 Deployment/Service 适配器;ServiceAccount 按目标命名空间最小授权;**镜像仓库白名单 + 摘要 pin**(发布权≈代码执行权,必须管控)
-- Secret 资源类型 + 信封加密(cryptography,后续接 KMS)
-- Helm Chart:双副本 + initContainer 跑迁移(避免多副本迁移竞态)+ Ingress
-- 资源健康探测(MCPServer 端点存活 → conditions)
-- 消费方图谱(GET /teams/{team}/consumers)+ 删除级联通知
-- 双语 UI(react-i18next,上游组件设计可借鉴)
-- pg_trgm 搜索;OTel metrics + tracing;pg_dump 定时备份;审计保留策略
-- 消费端容错规范:缓存解析结果,容忍注册中心短时不可用(写入 README 运维章节)
+- ✅ 资源模型增强:catalog 元数据列(npm/PyPI 对齐)+ `env[].valueFrom.secretRef` + 版本 `change_notes`
+- ✅ Secret 类型 + Fernet 信封加密(值永不出库)
+- ✅ OIDC SSO:通用 discovery(authlib JWKS 验签)+ 飞书预设(OAuth2 + user_info),JIT 建号,state-cookie 防 CSRF
+- ✅ K8s 部署控制器:Deployment 资源 + 级别触发调和循环 + 可插拔适配器(kubernetes-asyncio 原生)+ 镜像白名单;RBAC 模板按命名空间最小授权
+- ✅ Helm Chart:双副本 + initContainer 迁移 + readiness/liveness + Ingress 可选(helm template 验证通过)
+- ✅ 健康探测(MCPServer 端点 → status conditions);消费方图谱 API + 删除级联通知
+- ✅ pg_trgm 搜索索引;/metrics(Prometheus);OTel tracing(环境变量开启);审计/outbox 保留策略
+- ✅ 双语 UI v0(Next.js 静态导出 + react-i18next:登录/目录/发布/订阅审批,中英切换)
 
-## 阶段 C — 开源发布
+## 阶段 C — 开源发布 ✅(2026-10-24)
 
-- README.en / CONTRIBUTING / SECURITY.md / DCO / PR-模板
-- mkdocs-material + mkdocs-static-i18n 双语文档站
-- 发布流水线:ghcr 镜像 + cosign 签名 + semver
-- 多环境提升(agentrum export / apply 跨环境包)
-- 试点验收清单(2-3 团队跑 4-6 周:发布→订阅→通知→部署闭环)
-- 可选池:Weblate(社区翻译)、Meilisearch(中文搜索升级)、订阅版本锁定(pin @tag)、团队配额、回收站、A2A Agent Card
+- ✅ README.en / CONTRIBUTING(DCO)/ SECURITY.md / CODE_OF_CONDUCT / PR 模板
+- ✅ mkdocs-material + mkdocs-static-i18n 双语文档站(CI 自动部署 gh-pages)
+- ✅ 发布流水线:tag 触发 ghcr 镜像 + cosign keyless 签名 + Helm chart 随 Release 发布
+- ✅ 多环境提升:`agentrum export`(Secret 值强制剥离)→ 目标环境 `agentrum apply`
+- ✅ `agentrum init` 脚手架(agent/mcp-server/skill/prompt 四模板)
+- ⏳ 试点验收清单(2-3 团队 × 4-6 周:发布→订阅→通知→部署闭环)——组织动作,待启动
+- 可选池(未排期):Weblate、Meilisearch、订阅版本锁定(pin @tag)、团队配额、回收站、A2A Agent Card
 
 ## 已知取舍(诚实记录)
 

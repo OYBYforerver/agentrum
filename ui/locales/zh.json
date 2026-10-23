@@ -1,0 +1,49 @@
+{
+  "app": {
+    "title": "Agentrum",
+    "tagline": "发布 · 订阅 · 部署 AI 资产"
+  },
+  "login": {
+    "heading": "登录",
+    "server": "注册中心地址",
+    "username": "用户名",
+    "password": "密码",
+    "submit": "登录",
+    "orSso": "或使用 SSO 登录",
+    "error": "登录失败:{{detail}}"
+  },
+  "nav": { "catalog": "目录", "publish": "发布", "subscriptions": "订阅", "logout": "退出" },
+  "catalog": {
+    "search": "搜索…",
+    "allKinds": "全部类型",
+    "columns": { "kind": "类型", "name": "名称", "namespace": "命名空间", "visibility": "可见性", "tag": "最新版本", "updated": "更新时间" },
+    "empty": "暂无资源。",
+    "restricted": "受限"
+  },
+  "publish": {
+    "heading": "发布资源",
+    "kind": "类型",
+    "namespace": "命名空间",
+    "name": "名称",
+    "tag": "Tag(不可变)",
+    "visibility": "可见性",
+    "description": "描述",
+    "spec": "Spec(JSON)",
+    "submit": "发布",
+    "success": "已发布 {{kind}} {{namespace}}/{{name}}",
+    "hint": "Secret 使用 {\"data\": {键: 值}} 格式 — 值加密存储,永不明文返回。"
+  },
+  "subs": {
+    "mine": "我所在团队的订阅",
+    "pending": "待我审批的订阅",
+    "subscribe": "新建订阅",
+    "targetKind": "目标类型",
+    "targetNamespace": "目标命名空间",
+    "targetName": "目标名称(* = 整个命名空间)",
+    "approve": "批准",
+    "reject": "拒绝",
+    "revoke": "退订",
+    "status": { "active": "生效中", "pending_approval": "待审批", "revoked": "已退订" }
+  },
+  "lang": { "label": "语言" }
+}

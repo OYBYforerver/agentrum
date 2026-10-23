@@ -1,0 +1,30 @@
+site_name: Agentrum
+site_description: Multi-tenant registry for AI agents, MCP servers, skills and prompts
+repo_url: https://github.com/agentrum/agentrum
+
+theme:
+  name: material
+  language: zh
+  palette:
+    primary: indigo
+    accent: cyan
+  features: [navigation.tabs, content.code.copy]
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: folder
+      languages:
+        - locale: zh
+          name: 中文
+          default: true
+          build: true
+        - locale: en
+          name: English
+          build: true
+
+nav:
+  - 首页: index.md
+  - 快速开始: quickstart.md
+  - 架构: architecture.md
+  - 路线图: roadmap.md

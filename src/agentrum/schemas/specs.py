@@ -21,10 +21,14 @@ class SecretRef(BaseModel):
     namespace: str | None = None
 
 
+class EnvFrom(BaseModel):
+    secret_ref: SecretRef
+
+
 class EnvVar(BaseSpec):
     name: str
     value: str | None = None
-    value_from: SecretRef | None = None
+    value_from: EnvFrom | None = None
 
     @model_validator(mode="after")
     def _either_value_or_ref(self) -> "EnvVar":

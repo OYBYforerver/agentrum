@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentrum.fullname" . }}
+  labels:
+    app.kubernetes.io/name: agentrum
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentrum
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentrum
+    spec:
+      serviceAccountName: {{ include "agentrum.fullname" . }}
+      initContainers:
+        # Migrations run once per rollout; app pods never race on alembic.
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - name: ARK_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret | default (include "agentrum.fullname" .) }}
+                  key: AGENT_REGISTRY_DATABASE_URL
+      containers:
+        - name: server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: ARK_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret | default (include "agentrum.fullname" .) }}
+                  key: AGENT_REGISTRY_DATABASE_URL
+            - name: ARK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret | default (include "agentrum.fullname" .) }}
+                  key: ARK_SECRET_KEY
+            - name: ARK_BOOTSTRAP_ADMIN_USERNAME
+              value: {{ .Values.auth.bootstrapAdminUsername | quote }}
+            - name: ARK_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentrum.fullname" . }}
+                  key: ARK_BOOTSTRAP_ADMIN_PASSWORD
+            {{- if .Values.secrets.encryptionKey }}
+            - name: ARK_SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentrum.fullname" . }}
+                  key: ARK_SECRET_ENCRYPTION_KEY
+            {{- end }}
+            - name: ARK_IMAGE_ALLOWLIST
+              value: {{ .Values.deploy.imageAllowlist | quote }}
+            {{- if .Values.deploy.serviceAccount }}
+            - name: ARK_DEPLOY_SERVICE_ACCOUNT
+              value: {{ .Values.deploy.serviceAccount | quote }}
+            {{- end }}
+            - name: ARK_LOG_FORMAT
+              value: {{ .Values.observability.logFormat | quote }}
+            {{- if .Values.auth.oidcGenericIssuer }}
+            - name: ARK_OIDC_GENERIC_ISSUER
+              value: {{ .Values.auth.oidcGenericIssuer | quote }}
+            - name: ARK_OIDC_GENERIC_CLIENT_ID
+              value: {{ .Values.auth.oidcGenericClientId | quote }}
+            - name: ARK_OIDC_GENERIC_CLIENT_SECRET
+              value: {{ .Values.auth.oidcGenericClientSecret | quote }}
+            {{- end }}
+            {{- if .Values.auth.feishuAppId }}
+            - name: ARK_FEISHU_APP_ID
+              value: {{ .Values.auth.feishuAppId | quote }}
+            - name: ARK_FEISHU_APP_SECRET
+              value: {{ .Values.auth.feishuAppSecret | quote }}
+            {{- end }}
+            {{- if .Values.auth.redirectBase }}
+            - name: ARK_OIDC_REDIRECT_BASE
+              value: {{ .Values.auth.redirectBase | quote }}
+            {{- end }}
+            {{- if .Values.auth.uiOrigin }}
+            - name: ARK_UI_ORIGIN
+              value: {{ .Values.auth.uiOrigin | quote }}
+            {{- end }}
+            {{- if .Values.notifications.feishuWebhookUrl }}
+            - name: ARK_FEISHU_WEBHOOK_URL
+              value: {{ .Values.notifications.feishuWebhookUrl | quote }}
+            {{- end }}
+            {{- if .Values.observability.otelEnabled }}
+            - name: ARK_OTEL_ENABLED
+              value: "true"
+            - name: ARK_OTEL_ENDPOINT
+              value: {{ .Values.observability.otelEndpoint | quote }}
+            {{- end }}

@@ -43,7 +43,13 @@ git clone <your-repo-url> agentrum && cd agentrum
 docker compose up -d --wait
 ```
 
-打开 <http://localhost:12122/docs> 查看 OpenAPI 文档。初始管理员账号由环境变量 `ARK_BOOTSTRAP_ADMIN_USERNAME` / `ARK_BOOTSTRAP_ADMIN_PASSWORD` 控制(默认 `admin` / `admin123`,**生产环境务必修改**)。
+打开 <http://localhost:12122/docs> 查看 OpenAPI 文档;双语管理界面(中文/English)构建与部署:
+
+```bash
+cd ui && npm install && npm run build   # 静态产物在 ui/out/,任意静态服务器托管
+```
+
+生产部署(K8s 双副本 + 迁移 initContainer + 镜像白名单)见 `charts/agentrum` 与 [docs/site](docs/site)。初始管理员账号由环境变量 `ARK_BOOTSTRAP_ADMIN_USERNAME` / `ARK_BOOTSTRAP_ADMIN_PASSWORD` 控制(默认 `admin` / `admin123`,**生产环境务必修改**)。
 
 只想本地跑(不进容器):
 
