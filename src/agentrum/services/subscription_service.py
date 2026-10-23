@@ -24,6 +24,10 @@ async def create(
     await team_service.require_member(session, actor, team)
 
     kind = resource_service.normalize_kind(data.kind)
+    if kind == "Prompt":
+        raise errors.ValidationError(
+            "prompts are project-private and cannot be subscribed across projects"
+        )
     ns = await session.get(models.Namespace, data.namespace)
     if ns is None:
         raise errors.NotFoundError(f"namespace {data.namespace!r} not found")

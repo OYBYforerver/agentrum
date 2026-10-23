@@ -38,6 +38,13 @@ def _server() -> str:
 
 
 def _headers() -> dict:
+    ak = os.environ.get("AGENTRUM_AK") or _load_credentials().get("ak")
+    sk = os.environ.get("AGENTRUM_SK") or _load_credentials().get("sk")
+    if ak and sk:
+        import base64
+
+        raw = base64.b64encode(f"{ak}:{sk}".encode()).decode()
+        return {"Authorization": f"Basic {raw}"}
     token = os.environ.get("AGENTRUM_TOKEN") or _load_credentials().get("token")
     if not token:
         typer.echo("Not logged in. Run: agentrum login ...", err=True)
@@ -48,10 +55,21 @@ def _headers() -> dict:
 @app.command()
 def login(
     server: str = typer.Option(..., help="Registry base URL, e.g. http://localhost:12122"),
-    username: str = typer.Option(..., prompt=True),
+    username: str = typer.Option(None, prompt=True),
     password: str = typer.Option("", prompt=True, hide_input=True),
+    ak: str = typer.Option(None, help="Project access key (AK/SK login for CI)"),
+    sk: str = typer.Option(None, help="Project secret key (used with --ak, hidden input)"),
 ) -> None:
-    """Authenticate and store credentials locally (chmod 0600)."""
+    """Authenticate and store credentials locally (chmod 0600).
+
+    Either username/password (console session) or --ak/--sk (project-scoped
+    machine credential; scopes apply)."""
+    if ak and not sk:
+        sk = typer.prompt("SK", hide_input=True)
+    if ak and sk:
+        _save_credentials({"server": server.rstrip("/"), "ak": ak, "sk": sk})
+        typer.echo(f"✔ stored AK/SK for {server} (project-scoped)")
+        return
     try:
         resp = httpx.post(
             f"{server.rstrip('/')}/v1/auth/login",

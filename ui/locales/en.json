@@ -1,41 +1,52 @@
 {
-  "app": {
-    "title": "Agentrum",
-    "tagline": "Publish · Subscribe · Run AI assets"
-  },
+  "app": { "title": "Agentrum", "tagline": "Publish · Subscribe · Run AI assets" },
+  "common": { "ok": "OK", "cancel": "Cancel", "delete": "Delete" },
   "login": {
     "heading": "Sign in",
     "server": "Registry URL",
     "username": "Username",
     "password": "Password",
     "submit": "Sign in",
-    "orSso": "or sign in with SSO",
+    "orSso": "SSO (configure first)",
     "error": "Sign-in failed: {{detail}}"
   },
-  "nav": { "catalog": "Catalog", "publish": "Publish", "subscriptions": "Subscriptions", "logout": "Sign out" },
-  "catalog": {
-    "search": "Search…",
-    "allKinds": "All kinds",
-    "columns": { "kind": "Kind", "name": "Name", "namespace": "Namespace", "visibility": "Visibility", "tag": "Latest tag", "updated": "Updated" },
-    "empty": "No resources yet.",
-    "restricted": "restricted"
+  "nav": {
+    "catalog": "Catalog",
+    "publish": "Publish",
+    "subscriptions": "My subscriptions",
+    "settings": "Settings",
+    "theme": "Theme",
+    "logout": "Sign out"
   },
+  "projects": {
+    "heading": "My projects",
+    "create": "Create project",
+    "name": "Project ID (lowercase/digits/-)",
+    "displayName": "Display name",
+    "empty": "No projects yet — ask a platform admin to provision one.",
+    "switcher": "Switch project"
+  },
+  "resources": {
+    "publish": "Publish",
+    "versions": "Versions",
+    "empty": "Nothing here yet — use Publish in the top right.",
+    "promptPrivate": "Prompts are shared within this project only and are never visible to other projects.",
+    "confirmDelete": "Delete {{name}}? (soft delete; re-publishing restores it)",
+    "cols": { "name": "Name", "visibility": "Visibility", "tag": "Latest tag", "updated": "Updated" }
+  },
+  "visibility": { "internal": "internal", "restricted": "restricted", "private": "project-private" },
   "publish": {
-    "heading": "Publish a resource",
-    "kind": "Kind",
-    "namespace": "Namespace",
+    "submit": "Publish",
     "name": "Name",
     "tag": "Tag (immutable)",
     "visibility": "Visibility",
     "description": "Description",
-    "spec": "Spec (JSON)",
-    "submit": "Publish",
-    "success": "Published {{kind}} {{namespace}}/{{name}}",
-    "hint": "Secrets use {\"data\": {KEY: VALUE}} — values are encrypted and never returned."
+    "changeNotes": "Change notes",
+    "changeNotesHint": "What changed in this version (sent to subscribers)"
   },
   "subs": {
-    "mine": "My team's subscriptions",
-    "pending": "Pending approvals for my namespaces",
+    "mine": "My subscriptions",
+    "pending": "Subscription requests (awaiting my approval)",
     "subscribe": "New subscription",
     "targetKind": "Target kind",
     "targetNamespace": "Target namespace",
@@ -43,7 +54,29 @@
     "approve": "Approve",
     "reject": "Reject",
     "revoke": "Revoke",
+    "noPending": "No pending subscription requests",
+    "noMine": "Not subscribed to anything yet",
     "status": { "active": "active", "pending_approval": "pending approval", "revoked": "revoked" }
+  },
+  "settings": {
+    "members": "Members",
+    "username": "Username",
+    "addMember": "Add member"
+  },
+  "aksk": {
+    "heading": "AK/SK credentials",
+    "hint": "Project-scoped machine credentials: CLI / CI / runtime agents MUST carry them to register, discover and consume. The SK is shown exactly once.",
+    "keyName": "Purpose (e.g. prod-ci)",
+    "create": "Create AK/SK",
+    "createdTitle": "AK/SK created",
+    "createdHint": "Save it now — the SK will never be shown again:",
+    "ak": "Access Key",
+    "sk": "Secret Key",
+    "lastUsed": "Last used {{time}}",
+    "neverUsed": "never used",
+    "revoked": "revoked",
+    "revoke": "Revoke",
+    "empty": "No AK/SK yet"
   },
   "lang": { "label": "Language" }
 }

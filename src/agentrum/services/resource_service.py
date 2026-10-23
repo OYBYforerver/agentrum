@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentrum import audit, errors
+from agentrum.auth.ak_context import ak_project_id, has_scope
 from agentrum.db import models
 from agentrum.schemas.specs import validate_catalog, validate_spec
 from agentrum.services import notification_service, secret_service, team_service
@@ -39,6 +40,14 @@ async def _require_publish_role(
     ns = await session.get(models.Namespace, namespace_name)
     if ns is None:
         raise errors.NotFoundError(f"namespace {namespace_name!r} not found")
+    if ak_project_id() is not None:
+        if ak_project_id() != str(ns.team_id):
+            raise errors.PermissionDeniedError(
+                f"access key is scoped to a different project, not {namespace_name!r}"
+            )
+        if not has_scope("publish"):
+            raise errors.PermissionDeniedError("access key lacks the 'publish' scope")
+        return ns
     if actor.is_platform_admin:
         return ns
     role = await team_service.get_team_role(session, actor.id, ns.team_id)
@@ -84,10 +93,15 @@ async def _subscription_grants_read(
 async def _assert_can_read(session: AsyncSession, actor: models.User, resource: models.Resource) -> None:
     if actor.is_platform_admin or resource.visibility == models.VISIBILITY_INTERNAL:
         return
-    team_ids = await team_service.get_user_team_ids(session, actor.id)
+    team_ids = await team_service.effective_team_ids(session, actor.id)
     ns = await session.get(models.Namespace, resource.namespace)
     if ns is not None and ns.team_id in team_ids:
         return
+    if resource.visibility == models.VISIBILITY_PRIVATE:
+        # Project-private (Prompts): not even subscriptions grant access.
+        raise errors.PermissionDeniedError(
+            f"{resource.namespace}/{resource.name} is private to its project"
+        )
     if await _subscription_grants_read(session, team_ids, resource):
         return
     raise errors.PermissionDeniedError(
@@ -130,6 +144,11 @@ async def apply(
     if data.tag is not None and not TAG_RE.match(data.tag):
         raise errors.ValidationError("tag must be 1-63 chars of letters, digits, '.', '_' or '-'")
     await _require_publish_role(session, actor, namespace)
+
+    # Prompts are project-private: visibility is forced, cross-project sharing
+    # (subscriptions) is rejected at the subscription layer.
+    if kind == "Prompt":
+        data.visibility = models.VISIBILITY_PRIVATE
 
     if kind == "Deployment":
         target = await _get_resource(
@@ -277,7 +296,9 @@ async def list_resources(
     offset = max(0, offset)
 
     stmt = select(models.Resource)
-    vis = _visibility_clause(actor, await team_service.get_user_team_ids(session, actor.id))
+    vis = _visibility_clause(
+        actor, await team_service.effective_team_ids(session, actor.id)
+    )
     if vis is not None:
         stmt = stmt.where(vis)
     if kind:

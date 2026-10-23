@@ -172,3 +172,108 @@ def test_full_tenancy_and_subscription_flow():  # pragma: no cover
             assert r.status_code == 404
 
     _run(inner())
+
+
+def test_access_keys_and_prompt_privacy():  # pragma: no cover
+    """AK/SK lifecycle: admin creates a project key; Basic-auth publishes and
+    lists within scope; prompt resources are project-private and cannot be
+    subscribed across projects."""
+    from agentrum.main import _ensure_bootstrap_admin
+
+    async def inner():
+        import base64
+
+        import httpx
+        from httpx import ASGITransport
+
+        await _ensure_bootstrap_admin()
+        sfx = _suffix()
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=__import__("agentrum.main", fromlist=["app"]).app),
+            base_url="http://test",
+        ) as c:
+            r = await c.post("/v1/auth/login", json={"username": "admin", "password": "admin123"})
+            admin = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+            r = await c.post("/v1/teams", headers=admin, json={"name": f"ak-pub-{sfx}"})
+            assert r.status_code == 201, r.text
+            pub_team = f"ak-pub-{sfx}"
+            r = await c.post("/v1/teams", headers=admin, json={"name": f"ak-sub-{sfx}"})
+            assert r.status_code == 201, r.text
+            sub_team = f"ak-sub-{sfx}"
+
+            # create an AK for the publishing project
+            r = await c.post(
+                f"/v1/teams/{pub_team}/access-keys",
+                headers=admin,
+                json={"name": "ci", "scopes": ["read", "publish"]},
+            )
+            assert r.status_code == 201, r.text
+            ak, sk = r.json()["access_key"], r.json()["secret"]
+            basic = {
+                "Authorization": "Basic "
+                + base64.b64encode(f"{ak}:{sk}".encode()).decode()
+            }
+
+            # AK publish works (publish scope), prompt is forced private
+            r = await c.put(
+                f"/v1/resources/Prompt/{pub_team}/greeting",
+                headers=basic,
+                json={"spec": {"template": "hello {{name}}"}, "tag": "v1"},
+            )
+            assert r.status_code == 201, r.text
+            assert r.json()["visibility"] == "private", r.text
+
+            # AK list discovery works (read scope)
+            r = await c.get("/v1/resources", headers=basic)
+            assert r.status_code == 200
+            names = [it["name"] for it in r.json()["items"]]
+            assert "greeting" in names
+
+            # member of ANOTHER project cannot read the private prompt
+            await c.post(
+                "/v1/users",
+                headers=admin,
+                json={"username": f"ak-bob-{sfx}", "password": "password-123"},
+            )
+            await c.post(
+                f"/v1/teams/{sub_team}/members",
+                headers=admin,
+                json={"username": f"ak-bob-{sfx}", "role": "member"},
+            )
+            r = await c.post(
+                "/v1/auth/login",
+                json={"username": f"ak-bob-{sfx}", "password": "password-123"},
+            )
+            bob = {"Authorization": f"Bearer {r.json()['access_token']}"}
+            r = await c.get(f"/v1/resources/Prompt/{pub_team}/greeting", headers=bob)
+            assert r.status_code == 403, r.text
+
+            # subscribing to a Prompt is rejected outright
+            r = await c.post(
+                f"/v1/teams/{sub_team}/subscriptions",
+                headers=bob,
+                json={"kind": "Prompt", "namespace": pub_team, "name": "greeting"},
+            )
+            assert r.status_code == 400, r.text
+
+            # AK without publish scope cannot publish
+            r = await c.post(
+                f"/v1/teams/{sub_team}/access-keys",
+                headers=admin,
+                json={"name": "ro", "scopes": ["read"]},
+            )
+            ro_basic = {
+                "Authorization": "Basic "
+                + base64.b64encode(
+                    f"{r.json()['access_key']}:{r.json()['secret']}".encode()
+                ).decode()
+            }
+            r = await c.put(
+                f"/v1/resources/Skill/{pub_team}/x",
+                headers=ro_basic,
+                json={"spec": {}},
+            )
+            assert r.status_code == 403, r.text
+
+    _run(inner())

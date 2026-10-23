@@ -50,3 +50,10 @@ def new_api_token() -> tuple[str, str]:
     """Return (plaintext_token, stored_hash). The plaintext is shown once."""
     raw = API_TOKEN_PREFIX + secrets.token_urlsafe(32)
     return raw, hash_api_token(raw)
+
+
+def new_access_key() -> tuple[str, str, str]:
+    """Return (access_key, plaintext_secret, stored_secret_hash)."""
+    ak = "ark-ak-" + secrets.token_hex(8)
+    sk = "ark-sk-" + secrets.token_urlsafe(24)
+    return ak, sk, hash_api_token(sk)

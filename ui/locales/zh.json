@@ -1,41 +1,52 @@
 {
-  "app": {
-    "title": "Agentrum",
-    "tagline": "发布 · 订阅 · 部署 AI 资产"
-  },
+  "app": { "title": "Agentrum", "tagline": "发布 · 订阅 · 部署 AI 资产" },
+  "common": { "ok": "确定", "cancel": "取消", "delete": "删除" },
   "login": {
     "heading": "登录",
     "server": "注册中心地址",
     "username": "用户名",
     "password": "密码",
     "submit": "登录",
-    "orSso": "或使用 SSO 登录",
+    "orSso": "SSO 登录(待配置)",
     "error": "登录失败:{{detail}}"
   },
-  "nav": { "catalog": "目录", "publish": "发布", "subscriptions": "订阅", "logout": "退出" },
-  "catalog": {
-    "search": "搜索…",
-    "allKinds": "全部类型",
-    "columns": { "kind": "类型", "name": "名称", "namespace": "命名空间", "visibility": "可见性", "tag": "最新版本", "updated": "更新时间" },
-    "empty": "暂无资源。",
-    "restricted": "受限"
+  "nav": {
+    "catalog": "目录",
+    "publish": "发布",
+    "subscriptions": "我的订阅",
+    "settings": "设置",
+    "theme": "深浅切换",
+    "logout": "退出"
   },
+  "projects": {
+    "heading": "我的项目",
+    "create": "创建项目",
+    "name": "项目标识(小写字母/数字/-)",
+    "displayName": "项目名称",
+    "empty": "暂无项目,请联系平台管理员开通。",
+    "switcher": "切换项目"
+  },
+  "resources": {
+    "publish": "发布",
+    "versions": "版本",
+    "empty": "暂无资源,点击右上角发布。",
+    "promptPrivate": "提示词(Prompt)仅在本项目内共享,不对其他项目开放。",
+    "confirmDelete": "确认删除 {{name}}?(软删除,可重新发布恢复)",
+    "cols": { "name": "名称", "visibility": "可见性", "tag": "最新版本", "updated": "更新时间" }
+  },
+  "visibility": { "internal": "公司内部", "restricted": "受限", "private": "项目私有" },
   "publish": {
-    "heading": "发布资源",
-    "kind": "类型",
-    "namespace": "命名空间",
+    "submit": "发布",
     "name": "名称",
     "tag": "Tag(不可变)",
     "visibility": "可见性",
     "description": "描述",
-    "spec": "Spec(JSON)",
-    "submit": "发布",
-    "success": "已发布 {{kind}} {{namespace}}/{{name}}",
-    "hint": "Secret 使用 {\"data\": {键: 值}} 格式 — 值加密存储,永不明文返回。"
+    "changeNotes": "变更说明",
+    "changeNotesHint": "本版本改了什么(随通知发送给订阅方)"
   },
   "subs": {
-    "mine": "我所在团队的订阅",
-    "pending": "待我审批的订阅",
+    "mine": "我的订阅",
+    "pending": "订阅申请(待我审批)",
     "subscribe": "新建订阅",
     "targetKind": "目标类型",
     "targetNamespace": "目标命名空间",
@@ -43,7 +54,29 @@
     "approve": "批准",
     "reject": "拒绝",
     "revoke": "退订",
+    "noPending": "暂无待审批的订阅申请",
+    "noMine": "尚未订阅任何内容",
     "status": { "active": "生效中", "pending_approval": "待审批", "revoked": "已退订" }
+  },
+  "settings": {
+    "members": "成员管理",
+    "username": "用户名",
+    "addMember": "添加成员"
+  },
+  "aksk": {
+    "heading": "AK/SK 凭据",
+    "hint": "项目级机器凭据:CLI / CI / 运行时 Agent 的注册、发现、调用必须携带。SK 仅在创建时显示一次。",
+    "keyName": "用途名称(如 prod-ci)",
+    "create": "创建 AK/SK",
+    "createdTitle": "AK/SK 创建成功",
+    "createdHint": "请立即保存,此 SK 不会再次显示:",
+    "ak": "Access Key",
+    "sk": "Secret Key",
+    "lastUsed": "最近使用 {{time}}",
+    "neverUsed": "从未使用",
+    "revoked": "已吊销",
+    "revoke": "吊销",
+    "empty": "尚无 AK/SK"
   },
   "lang": { "label": "语言" }
 }

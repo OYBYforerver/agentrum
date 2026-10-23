@@ -30,6 +30,7 @@ ROLES = (ROLE_ADMIN, ROLE_PUBLISHER, ROLE_MEMBER)
 
 VISIBILITY_INTERNAL = "internal"
 VISIBILITY_RESTRICTED = "restricted"
+VISIBILITY_PRIVATE = "private"  # project-only (Prompts)
 
 SUB_ACTIVE = "active"
 SUB_PENDING = "pending_approval"
@@ -271,3 +272,26 @@ class SecretPayload(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+
+class AccessKey(Base):
+    """Project-scoped machine credential (AK/SK). SK is verified via SHA-256
+    hash and shown exactly once at creation; scopes: read/publish/deploy."""
+
+    __tablename__ = "access_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    access_key: Mapped[str] = mapped_column(String(63), unique=True)
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    scopes: Mapped[list] = mapped_column(JSONB, nullable=False, server_default='["read","publish","deploy"]')
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

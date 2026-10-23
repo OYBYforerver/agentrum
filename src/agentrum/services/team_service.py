@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentrum import audit, errors
+from agentrum.auth.ak_context import ak_project_id, has_scope
 from agentrum.db import models
 
 TEAM_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")
@@ -43,9 +44,25 @@ async def require_member(
 ) -> str:
     """Return the actor's effective role in `team`.
 
-    Platform admins act as team admins. With `minimum`, require at least that
-    role (e.g. "publisher" accepts admin and publisher, rejects member).
+    Order of resolution:
+    1. AK/SK principal scoped to this project — roles derive from key scopes
+       (read→member, publish→publisher; admin-level operations are denied).
+    2. Platform admins act as team admins.
+    3. Regular team membership, with `minimum` as the floor.
     """
+    akp = ak_project_id()
+    if akp is not None:
+        if akp != str(team.id):
+            raise errors.PermissionDeniedError(
+                f"access key is scoped to a different project, not {team.name!r}"
+            )
+        if minimum == models.ROLE_ADMIN:
+            raise errors.PermissionDeniedError("access keys cannot perform admin operations")
+        needed = "publish" if minimum in (models.ROLE_ADMIN, models.ROLE_PUBLISHER) else "read"
+        if has_scope(needed):
+            return models.ROLE_PUBLISHER if needed == "publish" else models.ROLE_MEMBER
+        raise errors.PermissionDeniedError(f"access key lacks the '{needed}' scope")
+
     if actor.is_platform_admin:
         return models.ROLE_ADMIN
     role = await get_team_role(session, actor.id, team.id)
@@ -54,6 +71,16 @@ async def require_member(
     if minimum is not None and ROLES.index(role) > ROLES.index(minimum):
         raise errors.PermissionDeniedError(f"role {minimum!r} or higher required in team {team.name!r}")
     return role
+
+
+async def effective_team_ids(session: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:
+    """Team scope for visibility decisions: the AK's project when the request
+    carries an AK/SK principal (least privilege — the owner's other teams are
+    NOT visible through the key), else the user's own memberships."""
+    akp = ak_project_id()
+    if akp is not None:
+        return [uuid.UUID(akp)]
+    return await get_user_team_ids(session, user_id)
 
 
 async def usernames(session: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
