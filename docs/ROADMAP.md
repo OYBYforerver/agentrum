@@ -15,11 +15,13 @@
 | per-kind spec 校验(Agent/MCPServer/Skill/Prompt) | ✅ |
 | 订阅事件通知:事务性 outbox + 后台投递(飞书群机器人 webhook + 通用 webhook HMAC 签名) | ✅ |
 | CI(GitHub Actions:ruff + pytest + 镜像构建) | ✅ |
-| testcontainers 集成测试 | ⏳ |
-| CLI 基础命令(login / apply / get) | ⏳ |
+| testcontainers 集成测试 | ✅(改为环境门控 + CI service container,`make test-integration`) |
+| CLI 基础命令(login / apply / get / delete / version) | ✅ |
+| 资源模型增强研究 | ✅ 结论见 [RESEARCH-resource-model.md](RESEARCH-resource-model.md):P0 = 目录元数据 + env.secretRef + 版本 changelog(部署控制器前置) |
 
 ## 阶段 B — 集群生产
 
+- 资源模型增强(P0,部署控制器前置):目录元数据(icon/category/docs/authors/license/long_description/examples)、`env[].valueFrom.secretRef` 引用模式、版本 `change_notes` —— 详见 [RESEARCH-resource-model.md](RESEARCH-resource-model.md)
 - OIDC SSO(authlib,Provider 抽象;飞书 profile + 任意标准 OIDC)
 - K8s 部署控制器:`kubernetes-asyncio` 原生 Deployment/Service 适配器;ServiceAccount 按目标命名空间最小授权;**镜像仓库白名单 + 摘要 pin**(发布权≈代码执行权,必须管控)
 - Secret 资源类型 + 信封加密(cryptography,后续接 KMS)

@@ -1,0 +1,180 @@
+"""Agentrum CLI — login, apply, get, delete against a registry server."""
+
+import json
+import os
+import stat
+from pathlib import Path
+
+import httpx
+import typer
+import yaml
+
+app = typer.Typer(
+    help="Agentrum — multi-tenant registry for AI agents, MCP servers, skills and prompts.",
+    no_args_is_help=True,
+)
+
+_CREDENTIALS = Path.home() / ".agentrum" / "credentials.json"
+
+
+def _load_credentials() -> dict:
+    if _CREDENTIALS.exists():
+        return json.loads(_CREDENTIALS.read_text())
+    return {}
+
+
+def _save_credentials(data: dict) -> None:
+    _CREDENTIALS.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    _CREDENTIALS.write_text(json.dumps(data))
+    _CREDENTIALS.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+
+def _server() -> str:
+    server = os.environ.get("AGENTRUM_SERVER") or _load_credentials().get("server")
+    if not server:
+        typer.echo("Not logged in. Run: agentrum login --server <url> ...", err=True)
+        raise typer.Exit(1)
+    return server.rstrip("/")
+
+
+def _headers() -> dict:
+    token = os.environ.get("AGENTRUM_TOKEN") or _load_credentials().get("token")
+    if not token:
+        typer.echo("Not logged in. Run: agentrum login ...", err=True)
+        raise typer.Exit(1)
+    return {"Authorization": f"Bearer {token}"}
+
+
+@app.command()
+def login(
+    server: str = typer.Option(..., help="Registry base URL, e.g. http://localhost:12122"),
+    username: str = typer.Option(..., prompt=True),
+    password: str = typer.Option("", prompt=True, hide_input=True),
+) -> None:
+    """Authenticate and store credentials locally (chmod 0600)."""
+    try:
+        resp = httpx.post(
+            f"{server.rstrip('/')}/v1/auth/login",
+            json={"username": username, "password": password},
+            timeout=15,
+        )
+    except httpx.HTTPError as exc:
+        typer.echo(f"cannot reach {server}: {exc}", err=True)
+        raise typer.Exit(1) from None
+    if resp.status_code != 200:
+        typer.echo(f"login failed ({resp.status_code}): {resp.json().get('detail', resp.text)}", err=True)
+        raise typer.Exit(1)
+    _save_credentials({"server": server.rstrip("/"), "token": resp.json()["access_token"]})
+    typer.echo(f"✔ logged in to {server} as {username}")
+
+
+@app.command()
+def apply(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+) -> None:
+    """Apply YAML manifests (documents separated by ---), kubectl-style."""
+    docs = [d for d in yaml.safe_load_all(file.read_text()) if d]
+    if not docs:
+        typer.echo("no documents found in manifest", err=True)
+        raise typer.Exit(1)
+    with httpx.Client(base_url=_server(), headers=_headers(), timeout=30) as client:
+        failed = 0
+        for doc in docs:
+            kind = doc.get("kind", "")
+            meta = doc.get("metadata") or {}
+            name = meta.get("name", "")
+            namespace = meta.get("namespace", "default")
+            body: dict = {"spec": doc.get("spec") or {}}
+            for key in ("tag", "labels", "description", "visibility"):
+                value = doc.get(key, meta.get(key))
+                if value is not None:
+                    body[key] = value
+            resp = client.put(f"/v1/resources/{kind}/{namespace}/{name}", json=body)
+            mark = "✔" if resp.status_code in (200, 201) else "✘"
+            typer.echo(f"{mark} {kind}/{namespace}/{name} -> {resp.status_code}")
+            if resp.status_code not in (200, 201):
+                failed += 1
+                detail = resp.json().get("detail", resp.text)
+                typer.echo(f"    {detail}", err=True)
+        if failed:
+            raise typer.Exit(1)
+
+
+def _print_table(headers: list[str], rows: list[list[str]]) -> None:
+    widths = [
+        max(len(h), *(len(str(r[i])) for r in rows)) if rows else len(h)
+        for i, h in enumerate(headers)
+    ]
+    fmt = "  ".join(f"{{:<{w}}}" for w in widths)
+    typer.echo(fmt.format(*headers))
+    typer.echo(fmt.format(*["-" * w for w in widths]))
+    for row in rows:
+        typer.echo(fmt.format(*[str(c) for c in row]))
+
+
+@app.command(name="get")
+def get_cmd(
+    kind: str,
+    name: str | None = typer.Argument(None),
+    namespace: str | None = typer.Option(None, "-n", "--namespace"),
+    all_namespaces: bool = typer.Option(False, "-A", "--all-namespaces"),
+) -> None:
+    """List resources of a kind, or show one resource."""
+    with httpx.Client(base_url=_server(), headers=_headers(), timeout=30) as client:
+        if name:
+            if not namespace:
+                typer.echo("namespace is required when NAME is given (-n)", err=True)
+                raise typer.Exit(1)
+            resp = client.get(f"/v1/resources/{kind}/{namespace}/{name}")
+            if resp.status_code != 200:
+                typer.echo(resp.json().get("detail", resp.text), err=True)
+                raise typer.Exit(1)
+            typer.echo(json.dumps(resp.json(), indent=2, ensure_ascii=False))
+            return
+        params: dict = {"kind": kind, "limit": 200}
+        if namespace and not all_namespaces:
+            params["namespace"] = namespace
+        resp = client.get("/v1/resources", params=params)
+        if resp.status_code != 200:
+            typer.echo(resp.json().get("detail", resp.text), err=True)
+            raise typer.Exit(1)
+        items = resp.json()["items"]
+        rows = [
+            [
+                it["kind"],
+                it["namespace"],
+                it["name"],
+                it["visibility"],
+                (it.get("latest_version") or {}).get("tag") or f"v{(it.get('latest_version') or {}).get('version', '-')}",
+                it["updated_at"][:19],
+            ]
+            for it in items
+        ]
+        _print_table(["KIND", "NAMESPACE", "NAME", "VISIBILITY", "TAG", "UPDATED"], rows)
+        typer.echo(f"\n{len(items)} resource(s)")
+
+
+@app.command()
+def delete(
+    kind: str,
+    ref: str = typer.Argument(..., help="namespace/name"),
+) -> None:
+    """Soft-delete a resource (re-apply restores it)."""
+    namespace, _, name = ref.partition("/")
+    if not namespace or not name:
+        typer.echo("ref must be namespace/name", err=True)
+        raise typer.Exit(1)
+    with httpx.Client(base_url=_server(), headers=_headers(), timeout=30) as client:
+        resp = client.delete(f"/v1/resources/{kind}/{namespace}/{name}")
+        if resp.status_code == 204:
+            typer.echo(f"✔ deleted {kind}/{namespace}/{name}")
+        else:
+            typer.echo(resp.json().get("detail", resp.text), err=True)
+            raise typer.Exit(1)
+
+
+@app.command()
+def version() -> None:
+    """Show server version."""
+    resp = httpx.get(f"{_server()}/health", timeout=10)
+    typer.echo(json.dumps(resp.json(), ensure_ascii=False))

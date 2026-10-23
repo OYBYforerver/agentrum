@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentrum.auth.deps import get_current_user
@@ -55,19 +55,21 @@ async def _serialize(session: AsyncSession, resources, latest) -> list[ResourceO
     return out
 
 
-@router.put("/{kind}/{namespace}/{name}", response_model=ResourceOut, status_code=201)
+@router.put("/{kind}/{namespace}/{name}", response_model=ResourceOut)
 async def apply_resource(
     kind: str,
     namespace: str,
     name: str,
     body: ResourceApplyIn,
     request: Request,
+    response: Response,
     user: models.User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ResourceOut:
-    resource, rv, _created = await resource_service.apply(
+    resource, rv, created = await resource_service.apply(
         session, user, kind, namespace, name, body, source_ip=_client_ip(request)
     )
+    response.status_code = 201 if created else 200
     names = await team_service.usernames(session, [resource.created_by, rv.published_by])
     return ResourceOut(
         kind=resource.kind,

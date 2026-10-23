@@ -8,6 +8,22 @@ on:
 jobs:
   lint-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agentrum
+          POSTGRES_PASSWORD: agentrum
+          POSTGRES_DB: agentrum_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U agentrum"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      ARK_DATABASE_URL: postgresql+asyncpg://agentrum:agentrum@localhost:5433/agentrum_test
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -19,6 +35,12 @@ jobs:
         run: uv run ruff check src tests
       - name: Unit tests
         run: uv run pytest -q
+      - name: Migrate test database
+        run: uv run alembic upgrade head
+      - name: Integration tests
+        run: uv run pytest tests/integration -q
+        env:
+          ARK_INTEGRATION: "1"
 
   docker:
     runs-on: ubuntu-latest
