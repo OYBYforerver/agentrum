@@ -62,8 +62,8 @@
 - `agentrum init <kind>` 脚手架 + `agentrum build` 构建链(对标上游,决定开发者口碑)
 - 目录"官方认证"标签(运营治理配套)
 
-## 6. 待决策点(需要产品判断)
+## 6. 决策记录(2026-10-24,推荐已采纳)
 
-1. 目录元数据字段集是否认可 P0 清单?(字段一旦有用户数据,变更成本高)
-2. `init/build` 重型 DX 是否投入?(不投入则 CLI 保持"纯客户端",开发者自己写 Dockerfile)
-3. Skill 是否照抄上游"git 为正文"的模式,还是允许"正文直接入库"两种来源并存?——建议并存,git 模式作为推荐
+1. **目录元数据**:采纳 P0 字段集;字段命名对齐 npm/PyPI 惯例,MCPServer 额外对齐 MCP Registry `server.json` 规范(为官方目录兼容留路)。元数据存独立 `catalog` JSONB 列(可变,随资源不随版本),与不可变的版本 spec 分离;分类 P0 用自由 keywords,后期收敛受控词表;`examples` 推迟至 P1。
+2. **init/build**:`agentrum init` 纳入阶段 C 开源前(成本低、锁定 spec 惯例、开源第一分钟体验);`agentrum build` 暂不投入,待部署控制器稳定后做"读 agentrum.yaml 调 docker"的薄封装,不自建框架构建链。
+3. **Skill 来源**:两种模式并存、git 为推荐——`spec.source.git{url, ref, credentials_ref}` 与 `spec.content` 二选一;git 锁定必须 pin **commit SHA**(分支会漂移,违背不可变原则);schema 与同步 controller 在 P1 同时上线(避免出现"发布即假功能")。
