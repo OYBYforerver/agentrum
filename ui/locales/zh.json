@@ -35,7 +35,8 @@
       "agents": "Agent",
       "skills": "Skill",
       "prompts": "Prompt"
-    }
+    },
+    "myProjects": "我的项目"
   },
   "projects": {
     "heading": "我的项目",
@@ -88,7 +89,12 @@
       "active": "生效中",
       "pending_approval": "待审批",
       "revoked": "已退订"
-    }
+    },
+    "searchNamespace": "输入关键字搜索项目 / 命名空间…",
+    "searchName": "输入名称搜索资源…",
+    "pickNamespaceFirst": "请先选择目标命名空间",
+    "noMatch": "无匹配结果(或当前不可见)",
+    "wholeNamespaceHint": "名称留空 = 订阅整个命名空间(新资源发布时自动收到通知)"
   },
   "settings": {
     "members": "成员管理",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
 
@@ -13,12 +13,100 @@ interface SubRow {
   status: string;
 }
 
+interface PoolRow {
+  kind: string;
+  namespace: string;
+  name: string;
+  visibility: string;
+  description: string | null;
+  latest_version: { tag: string | null; version: number } | null;
+}
+
+/** Searchable select: input filters a dropdown fed by a resource pool. */
+function SearchSelect({
+  placeholder,
+  value,
+  onPick,
+  options,
+  pick,
+  render,
+}: {
+  placeholder: string;
+  value: string;
+  onPick: (v: string) => void;
+  options: PoolRow[];
+  pick: (r: PoolRow) => string;
+  render: (r: PoolRow) => { title: string; sub: string };
+}) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const filtered = useMemo(
+    () =>
+      options.filter(
+        (o) =>
+          o.namespace.includes(query.toLowerCase()) ||
+          o.name.includes(query.toLowerCase()) ||
+          (o.description || "").toLowerCase().includes(query.toLowerCase())
+      ),
+    [options, query]
+  );
+
+  return (
+    <div className="combo">
+      <input
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+          onPick(e.target.value);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && (
+        <div className="combo-list">
+          {filtered.map((o) => {
+            const { title, sub } = render(o);
+            return (
+              <div
+                key={`${o.namespace}/${o.name}`}
+                className="combo-item"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onPick(pick(o));
+                  setQuery("");
+                  setOpen(false);
+                }}
+              >
+                <div>
+                  <strong>{title}</strong>
+                  {sub && <div className="muted" style={{ fontSize: 12 }}>{sub}</div>}
+                </div>
+                <span className={`badge ${o.visibility}`}>
+                  {t(`visibility.${o.visibility}`, o.visibility)}
+                </span>
+              </div>
+            );
+          })}
+          {filtered.length === 0 && <div className="combo-item muted">{t("subs.noMatch")}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Subscriptions({ project }: { project: string }) {
   const { t } = useTranslation();
   const [mine, setMine] = useState<SubRow[]>([]);
   const [pending, setPending] = useState<SubRow[]>([]);
   const [error, setError] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const [kindSel, setKindSel] = useState("MCPServer");
+  const [pool, setPool] = useState<PoolRow[]>([]);
+  const [nsVal, setNsVal] = useState("");
+  const [nameVal, setNameVal] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -37,18 +125,35 @@ export default function Subscriptions({ project }: { project: string }) {
     void load();
   }, [load]);
 
-  async function create(form: FormData) {
+  // Load the visible catalog for the chosen kind whenever the dialog opens
+  // or the kind changes — this powers both searchable dropdowns.
+  useEffect(() => {
+    if (!showNew) return;
+    void api<{ items: PoolRow[] }>(`/v1/resources?kind=${kindSel}&limit=200`)
+      .then((d) => setPool(d.items))
+      .catch((e) => setError(String(e).replace("Error: ", "")));
+  }, [showNew, kindSel]);
+
+  const namespaces = useMemo(
+    () => Array.from(new Set(pool.map((p) => p.namespace))).sort(),
+    [pool]
+  );
+  const namePool = useMemo(() => pool.filter((p) => p.namespace === nsVal), [pool, nsVal]);
+
+  async function create() {
     setError("");
     try {
       await api(`/v1/teams/${project}/subscriptions`, {
         method: "POST",
         body: JSON.stringify({
-          kind: String(form.get("kind")),
-          namespace: String(form.get("namespace")),
-          name: String(form.get("name")) || "*",
+          kind: kindSel,
+          namespace: nsVal,
+          name: nameVal || "*",
         }),
       });
       setShowNew(false);
+      setNsVal("");
+      setNameVal("");
       void load();
     } catch (e) {
       setError(String(e).replace("Error: ", ""));
@@ -109,7 +214,14 @@ export default function Subscriptions({ project }: { project: string }) {
       <div>
         <div style={{ display: "flex", marginBottom: 12 }}>
           <h3 style={{ margin: 0, flex: 1 }}>{t("subs.mine")}</h3>
-          <button className="primary" onClick={() => setShowNew(true)}>
+          <button
+            className="primary"
+            onClick={() => {
+              setShowNew(true);
+              setNsVal("");
+              setNameVal("");
+            }}
+          >
             + {t("subs.subscribe")}
           </button>
         </div>
@@ -151,29 +263,56 @@ export default function Subscriptions({ project }: { project: string }) {
         <div className="overlay" onClick={() => setShowNew(false)}>
           <div className="dialog" onClick={(e) => e.stopPropagation()}>
             <h3>{t("subs.subscribe")}</h3>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void create(new FormData(e.currentTarget));
+            <label>{t("subs.targetKind")}</label>
+            <select
+              value={kindSel}
+              onChange={(e) => {
+                setKindSel(e.target.value);
+                setNsVal("");
+                setNameVal("");
               }}
             >
-              <label>{t("subs.targetKind")}</label>
-              <select name="kind" defaultValue="MCPServer">
-                <option>Agent</option>
-                <option>MCPServer</option>
-                <option>Skill</option>
-              </select>
-              <label>{t("subs.targetNamespace")}</label>
-              <input name="namespace" required placeholder="payment" />
-              <label>{t("subs.targetName")}</label>
-              <input name="name" placeholder="payment-gateway" />
-              <div className="actions">
-                <button type="button" className="ghost" onClick={() => setShowNew(false)}>
-                  {t("common.cancel")}
-                </button>
-                <button className="primary">{t("common.ok")}</button>
-              </div>
-            </form>
+              <option>Agent</option>
+              <option>MCPServer</option>
+              <option>Skill</option>
+            </select>
+
+            <label>{t("subs.targetNamespace")}</label>
+            <SearchSelect
+              placeholder={t("subs.searchNamespace")}
+              value={nsVal}
+              onPick={setNsVal}
+              options={pool.filter((p, i) => namespaces.indexOf(p.namespace) === i)}
+              pick={(o) => o.namespace}
+              render={(o) => ({ title: o.namespace, sub: "" })}
+            />
+
+            <label>{t("subs.targetName")}</label>
+            <SearchSelect
+              placeholder={nsVal ? t("subs.searchName") : t("subs.pickNamespaceFirst")}
+              value={nameVal}
+              onPick={setNameVal}
+              options={namePool}
+              pick={(o) => o.name}
+              render={(o) => ({
+                title: o.name,
+                sub: `${o.latest_version?.tag || `v${o.latest_version?.version ?? "-"}`}${
+                  o.description ? " · " + o.description : ""
+                }`,
+              })}
+            />
+            <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
+              {t("subs.wholeNamespaceHint")}
+            </p>
+
+            <div className="actions">
+              <button type="button" className="ghost" onClick={() => setShowNew(false)}>
+                {t("common.cancel")}
+              </button>
+              <button className="primary" disabled={!nsVal} onClick={() => void create()}>
+                {t("common.ok")}
+              </button>
+            </div>
           </div>
         </div>
       )}

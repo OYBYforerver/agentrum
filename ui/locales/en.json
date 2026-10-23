@@ -35,7 +35,8 @@
       "agents": "Agent",
       "skills": "Skill",
       "prompts": "Prompt"
-    }
+    },
+    "myProjects": "My projects"
   },
   "projects": {
     "heading": "My projects",
@@ -88,7 +89,12 @@
       "active": "active",
       "pending_approval": "pending approval",
       "revoked": "revoked"
-    }
+    },
+    "searchNamespace": "Type to search projects / namespaces…",
+    "searchName": "Type to search resources…",
+    "pickNamespaceFirst": "Pick a target namespace first",
+    "noMatch": "No match (or not visible to you)",
+    "wholeNamespaceHint": "Leave the name empty to subscribe to the whole namespace (notified on every new version)"
   },
   "settings": {
     "members": "Members",

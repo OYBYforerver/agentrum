@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
+import { setLocale } from "../lib/i18n";
 import { toggleTheme } from "../lib/theme";
 import ResourceTab from "./ResourceTab";
 import Settings from "./Settings";
@@ -26,10 +27,12 @@ const RESOURCE_TABS: { id: "MCP Servers" | "Agents" | "Skills" | "Prompts"; icon
 export default function Workspace({
   project,
   onSwitch,
+  onBack,
   onExit,
 }: {
   project: string;
   onSwitch: (p: string) => void;
+  onBack: () => void;
   onExit: () => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -70,6 +73,9 @@ export default function Workspace({
             </option>
           ))}
         </select>
+        <button className="nav-item" onClick={onBack} style={{ marginTop: 8 }}>
+          <span>🏠</span> {t("nav.myProjects")}
+        </button>
         <div style={{ height: 12 }} />
         {RESOURCE_TABS.map((rt) => (
           <button
@@ -96,7 +102,7 @@ export default function Workspace({
         <div className="userbox">
           <select
             value={(i18n.language || "zh").startsWith("zh") ? "zh" : "en"}
-            onChange={(e) => void i18n.changeLanguage(e.target.value)}
+            onChange={(e) => setLocale(e.target.value as "zh" | "en")}
           >
             <option value="zh">中文</option>
             <option value="en">English</option>
@@ -111,7 +117,11 @@ export default function Workspace({
       </aside>
       <main className="content">
         <div className="crumbs">
-          {t("app.title")} / {project}
+          <button className="crumb-link" onClick={onBack}>
+            {t("nav.myProjects")}
+          </button>
+          <span className="muted"> / </span>
+          <span>{project}</span>
         </div>
         <h2 className="page">
           {view.tab === "subscriptions"

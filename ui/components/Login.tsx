@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, setServer, setToken } from "../lib/api";
+import { setLocale } from "../lib/i18n";
 
 export default function Login({ onOk }: { onOk: () => void }) {
   const { t, i18n } = useTranslation();
@@ -70,7 +71,7 @@ export default function Login({ onOk }: { onOk: () => void }) {
           </a>
           <select
             value={(i18n.language || "zh").startsWith("zh") ? "zh" : "en"}
-            onChange={(e) => void i18n.changeLanguage(e.target.value)}
+            onChange={(e) => setLocale(e.target.value as "zh" | "en")}
           >
             <option value="zh">中文</option>
             <option value="en">English</option>
