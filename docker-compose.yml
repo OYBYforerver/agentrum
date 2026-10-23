@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agentrum
+      POSTGRES_PASSWORD: agentrum
+      POSTGRES_DB: agentrum
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentrum -d agentrum"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  server:
+    build: .
+    environment:
+      ARK_DATABASE_URL: postgresql+asyncpg://agentrum:agentrum@postgres:5432/agentrum
+      ARK_SECRET_KEY: ${ARK_SECRET_KEY:-dev-insecure-change-me}
+    ports:
+      - "12122:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "alembic upgrade head && uvicorn agentrum.main:app --host 0.0.0.0 --port 8080"
+
+volumes:
+  pgdata:
