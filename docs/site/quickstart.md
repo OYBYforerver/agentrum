@@ -1,34 +1,37 @@
 # Quick start
 
-## Run locally (Docker)
+Run locally, publish your first asset, subscribe across teams — 5 minutes.
+
+## 1. 启动 / Run
 
 ```bash
 docker compose up -d --wait
 open http://localhost:12122/docs
 ```
 
-Bootstrap admin: `admin` / `admin123` (override before real use).
+Bootstrap admin: `admin` / `admin123`(生产环境务必修改)。
 
-## Publish your first asset
+## 2. 发布第一个资源 / Publish
 
 ```bash
 agentrum login --server http://localhost:12122 --username admin
-agentrum init mcp-server payment-gateway
-agentrum apply payment-gateway/agentrum.yaml
+agentrum init mcp-server payment-gateway && cd payment-gateway
+# 编辑 agentrum.yaml → agentrum apply agentrum.yaml
+agentrum apply agentrum.yaml
 agentrum get MCPServer
 ```
 
-## Subscribe across teams
+## 3. 跨项目订阅 / Subscribe across projects
 
-1. Team B member: `POST /v1/teams/{team-b}/subscriptions` targeting the resource
-2. `internal` → active immediately; `restricted` → owner-team admin approves
-3. New versions push notifications (Feishu webhook / generic webhook)
+1. 另一项目成员:控制台「我的订阅 → 新建订阅」(可搜索选择),或
+   `POST /v1/teams/{team-b}/subscriptions` 指定 `{kind, namespace, name}`
+2. `internal` → 直接生效;`restricted` → 属主项目 admin 在「订阅申请」里批准
+3. 之后每次发布新版本,订阅方通过飞书 / webhook 收到通知
 
-## Production (Kubernetes)
+## 4. 部署到集群 / Deploy
 
-```bash
-helm upgrade --install agentrum charts/agentrum \
-  --set database.url="postgresql+asyncpg://..." \
-  --set deploy.imageAllowlist="registry.internal/" \
-  --set auth.secretKey="$(openssl rand -hex 32)"
-```
+见 [部署接入](deploy.md):发布一个 `Deployment` 资源即可,控制器负责调和。
+
+## 5. 生产部署 / Production
+
+见 [运维手册](operations.md):Helm、环境变量、备份、可观测性。

@@ -2,13 +2,28 @@ site_name: Agentrum
 site_description: Multi-tenant registry for AI agents, MCP servers, skills and prompts
 repo_url: https://github.com/agentrum/agentrum
 
+docs_dir: docs/site
+site_dir: .docs-build
+
 theme:
   name: material
   language: zh
   palette:
-    primary: indigo
-    accent: cyan
-  features: [navigation.tabs, content.code.copy]
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: 深色
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: 浅色
+  features: [navigation.tabs, navigation.sections, content.code.copy]
 
 plugins:
   - search
@@ -25,6 +40,15 @@ plugins:
 
 nav:
   - 首页: index.md
-  - 快速开始: quickstart.md
-  - 架构: architecture.md
+  - 接入指南:
+      - 快速开始: quickstart.md
+      - CLI 参考: cli.md
+      - API 参考: api.md
+      - 资源规范(agentrum.yaml): resources.md
+      - 订阅与通知: subscribe.md
+      - 部署接入(K8s): deploy.md
+  - 管理与运维:
+      - 架构: architecture.md
+      - SSO 接入(管理员): sso.md
+      - 运维手册: operations.md
   - 路线图: roadmap.md
