@@ -1,6 +1,13 @@
 {
-  "app": { "title": "Agentrum", "tagline": "Publish · Subscribe · Run AI assets" },
-  "common": { "ok": "OK", "cancel": "Cancel", "delete": "Delete" },
+  "app": {
+    "title": "Agentrum",
+    "tagline": "Publish · Subscribe · Run AI assets"
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "delete": "Delete"
+  },
   "login": {
     "heading": "Sign in",
     "server": "Registry URL",
@@ -16,7 +23,19 @@
     "subscriptions": "My subscriptions",
     "settings": "Settings",
     "theme": "Theme",
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "kinds": {
+      "mcp": "MCP Servers",
+      "agents": "Agents",
+      "skills": "Skills",
+      "prompts": "Prompts"
+    },
+    "kindCodes": {
+      "mcp": "MCPServer",
+      "agents": "Agent",
+      "skills": "Skill",
+      "prompts": "Prompt"
+    }
   },
   "projects": {
     "heading": "My projects",
@@ -32,9 +51,18 @@
     "empty": "Nothing here yet — use Publish in the top right.",
     "promptPrivate": "Prompts are shared within this project only and are never visible to other projects.",
     "confirmDelete": "Delete {{name}}? (soft delete; re-publishing restores it)",
-    "cols": { "name": "Name", "visibility": "Visibility", "tag": "Latest tag", "updated": "Updated" }
+    "cols": {
+      "name": "Name",
+      "visibility": "Visibility",
+      "tag": "Latest tag",
+      "updated": "Updated"
+    }
   },
-  "visibility": { "internal": "internal", "restricted": "restricted", "private": "project-private" },
+  "visibility": {
+    "internal": "internal",
+    "restricted": "restricted",
+    "private": "project-private"
+  },
   "publish": {
     "submit": "Publish",
     "name": "Name",
@@ -56,7 +84,11 @@
     "revoke": "Revoke",
     "noPending": "No pending subscription requests",
     "noMine": "Not subscribed to anything yet",
-    "status": { "active": "active", "pending_approval": "pending approval", "revoked": "revoked" }
+    "status": {
+      "active": "active",
+      "pending_approval": "pending approval",
+      "revoked": "revoked"
+    }
   },
   "settings": {
     "members": "Members",
@@ -78,5 +110,33 @@
     "revoke": "Revoke",
     "empty": "No AK/SK yet"
   },
-  "lang": { "label": "Language" }
+  "lang": {
+    "label": "Language"
+  },
+  "roles": {
+    "admin": "admin",
+    "publisher": "publisher",
+    "member": "member"
+  },
+  "scopes": {
+    "read": "read",
+    "publish": "publish",
+    "deploy": "deploy"
+  },
+  "fields": {
+    "image": "Image",
+    "framework": "Framework",
+    "transport": "Transport",
+    "endpoint": "Endpoint",
+    "command": "Command (stdio)",
+    "entrypoint": "Entrypoint",
+    "instructions": "Instructions",
+    "template": "Template",
+    "data": "Data (KEY=VALUE per line)",
+    "target_kind": "Target kind",
+    "target_namespace": "Target namespace",
+    "target_name": "Target name",
+    "cluster_namespace": "Cluster namespace",
+    "replicas": "Replicas"
+  }
 }

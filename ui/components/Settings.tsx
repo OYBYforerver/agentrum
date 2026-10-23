@@ -99,7 +99,7 @@ export default function Settings({ project }: { project: string }) {
                     {m.display_name && <span className="muted"> · {m.display_name}</span>}
                   </td>
                   <td style={{ width: 110 }}>
-                    <span className="badge gray">{m.role}</span>
+                    <span className="badge gray">{t(`roles.${m.role}`, m.role)}</span>
                   </td>
                   <td style={{ width: 90, textAlign: "right" }}>
                     <button className="ghost" onClick={() => void removeMember(m.username)}>
@@ -114,9 +114,9 @@ export default function Settings({ project }: { project: string }) {
         <form onSubmit={(e) => { e.preventDefault(); void addMember(new FormData(e.currentTarget)); }} style={{ display: "flex", gap: 8 }}>
           <input name="username" placeholder={t("settings.username")} required />
           <select name="role" defaultValue="member">
-            <option value="admin">admin</option>
-            <option value="publisher">publisher</option>
-            <option value="member">member</option>
+            <option value="admin">{t("roles.admin")}</option>
+            <option value="publisher">{t("roles.publisher")}</option>
+            <option value="member">{t("roles.member")}</option>
           </select>
           <button className="primary">{t("settings.addMember")}</button>
         </form>
@@ -137,7 +137,7 @@ export default function Settings({ project }: { project: string }) {
                   <td>
                     {k.scopes.map((s) => (
                       <span key={s} className="badge gray" style={{ marginRight: 4 }}>
-                        {s}
+                        {t(`scopes.${s}`, s)}
                       </span>
                     ))}
                   </td>
@@ -169,7 +169,7 @@ export default function Settings({ project }: { project: string }) {
           <input name="name" placeholder={t("aksk.keyName")} required />
           {["read", "publish", "deploy"].map((s) => (
             <label key={s} style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--muted)" }}>
-              <input type="checkbox" name={`scope_${s}`} defaultChecked style={{ width: "auto" }} /> {s}
+              <input type="checkbox" name={`scope_${s}`} defaultChecked style={{ width: "auto" }} /> {t(`scopes.${s}`)}
             </label>
           ))}
           <button className="primary">{t("aksk.create")}</button>

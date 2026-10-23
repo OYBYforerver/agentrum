@@ -16,11 +16,11 @@ type View =
   | { tab: "subscriptions" }
   | { tab: "settings" };
 
-const RESOURCE_TABS: { id: string; icon: string }[] = [
-  { id: "MCP Servers", icon: "🖥" },
-  { id: "Agents", icon: "🤖" },
-  { id: "Skills", icon: "⚡" },
-  { id: "Prompts", icon: "📝" },
+const RESOURCE_TABS: { id: "MCP Servers" | "Agents" | "Skills" | "Prompts"; icon: string; kindKey: "mcp" | "agents" | "skills" | "prompts" }[] = [
+  { id: "MCP Servers", icon: "🖥", kindKey: "mcp" },
+  { id: "Agents", icon: "🤖", kindKey: "agents" },
+  { id: "Skills", icon: "⚡", kindKey: "skills" },
+  { id: "Prompts", icon: "📝", kindKey: "prompts" },
 ];
 
 export default function Workspace({
@@ -77,7 +77,7 @@ export default function Workspace({
             className={`nav-item ${view.tab === rt.id ? "active" : ""}`}
             onClick={() => setView({ tab: rt.id } as View)}
           >
-            <span>{rt.icon}</span> {rt.id}
+            <span>{rt.icon}</span> {t(`nav.kinds.${rt.kindKey}`)}
           </button>
         ))}
         <button
@@ -118,7 +118,14 @@ export default function Workspace({
             ? t("subs.mine")
             : view.tab === "settings"
               ? t("nav.settings")
-              : String(view.tab)}
+              : RESOURCE_TABS.find((rt) => rt.id === view.tab)?.kindKey
+                ? t(`nav.kinds.${RESOURCE_TABS.find((rt) => rt.id === view.tab)?.kindKey}`)
+                : String(view.tab)}
+          {kindOf && (
+            <span className="muted" style={{ fontSize: 13, marginLeft: 10, fontWeight: 400 }}>
+              {kindOf}
+            </span>
+          )}
         </h2>
         {kindOf ? (
           <ResourceTab kind={kindOf} namespace={project} />

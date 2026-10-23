@@ -23,30 +23,28 @@ interface VersionRow {
   created_at: string;
 }
 
-const KIND_FIELDS: Record<string, { key: string; label: string; placeholder?: string }[]> = {
+const KIND_FIELDS: Record<string, { key: string; labelKey: string; placeholder?: string }[]> = {
   Agent: [
-    { key: "image", label: "Image", placeholder: "registry.internal/my-agent:1.0.0" },
-    { key: "framework", label: "Framework", placeholder: "langgraph" },
+    { key: "image", labelKey: "image", placeholder: "registry.internal/my-agent:1.0.0" },
+    { key: "framework", labelKey: "framework", placeholder: "langgraph" },
   ],
   MCPServer: [
-    { key: "transport", label: "Transport" },
-    { key: "endpoint", label: "Endpoint", placeholder: "http://host:3000/mcp" },
-    { key: "command", label: "Command (stdio)" },
+    { key: "transport", labelKey: "transport" },
+    { key: "endpoint", labelKey: "endpoint", placeholder: "http://host:3000/mcp" },
+    { key: "command", labelKey: "command" },
   ],
   Skill: [
-    { key: "entrypoint", label: "Entrypoint", placeholder: "SKILL.md" },
-    { key: "instructions", label: "Instructions" },
+    { key: "entrypoint", labelKey: "entrypoint", placeholder: "SKILL.md" },
+    { key: "instructions", labelKey: "instructions" },
   ],
-  Prompt: [{ key: "template", label: "Template", placeholder: "评审以下变更: {{code}}" }],
-  Secret: [
-    { key: "data", label: "Data (KEY=VALUE per line)" },
-  ],
+  Prompt: [{ key: "template", labelKey: "template", placeholder: "评审以下变更: {{code}}" }],
+  Secret: [{ key: "data", labelKey: "data" }],
   Deployment: [
-    { key: "target_kind", label: "Target kind" },
-    { key: "target_namespace", label: "Target namespace" },
-    { key: "target_name", label: "Target name" },
-    { key: "cluster_namespace", label: "Cluster namespace" },
-    { key: "replicas", label: "Replicas" },
+    { key: "target_kind", labelKey: "target_kind" },
+    { key: "target_namespace", labelKey: "target_namespace" },
+    { key: "target_name", labelKey: "target_name" },
+    { key: "cluster_namespace", labelKey: "cluster_namespace" },
+    { key: "replicas", labelKey: "replicas" },
   ],
 };
 
@@ -240,7 +238,7 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
               <textarea name="description" rows={2} />
               {fields.map((f) => (
                 <div key={f.key}>
-                  <label>{f.label}</label>
+                  <label>{t(`fields.${f.labelKey}`)}</label>
                   {f.key === "transport" ? (
                     <select name="f_transport" defaultValue="streamable-http">
                       <option value="streamable-http">streamable-http</option>
