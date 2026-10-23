@@ -16,7 +16,12 @@ from agentrum.config import get_settings
 from agentrum.db import models
 from agentrum.db.engine import SessionLocal
 from agentrum.logging_setup import configure_logging
-from agentrum.services import notification_dispatcher
+from agentrum.services import (
+    maintenance_service,
+    notification_dispatcher,
+    probe_service,
+)
+from agentrum.services.deployments import reconciler as deployments_reconciler
 
 logger = logging.getLogger("agentrum.main")
 
@@ -51,11 +56,20 @@ async def _ensure_bootstrap_admin() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await _ensure_bootstrap_admin()
-    dispatcher = notification_dispatcher.start_dispatcher()
+    tasks = [
+        notification_dispatcher.start_dispatcher(),
+        deployments_reconciler.start_controller(),
+        probe_service.start_prober(),
+        maintenance_service.start_maintenance(),
+    ]
     try:
         yield
     finally:
-        await notification_dispatcher.stop_dispatcher(dispatcher)
+        for task in tasks:
+            task.cancel()
+        import asyncio
+
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def create_app() -> FastAPI:
@@ -86,7 +100,37 @@ def create_app() -> FastAPI:
     app.include_router(api_router)
     install_error_handlers(app)
 
+    if settings.otel_enabled:
+        _setup_tracing(app)
+    instrumentator(app)
+
     return app
+
+
+def instrumentator(app: FastAPI) -> None:
+    """Prometheus /metrics endpoint."""
+    from prometheus_fastapi_instrumentator import Instrumentator
+
+    Instrumentator(should_group_status_codes=False).instrument(app).expose(
+        app, include_in_schema=False
+    )
+
+
+def _setup_tracing(app: FastAPI) -> None:
+    """OTLP tracing, enabled with ARK_OTEL_ENABLED=true."""
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    settings = get_settings()
+    provider = TracerProvider(resource=Resource.create({"service.name": "agentrum"}))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=settings.otel_endpoint)))
+    trace.set_tracer_provider(provider)
+    FastAPIInstrumentor.instrument_app(app)
+    logger.info("OpenTelemetry tracing enabled -> %s", settings.otel_endpoint)
 
 
 app = create_app()

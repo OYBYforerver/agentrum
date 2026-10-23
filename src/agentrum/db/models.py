@@ -21,7 +21,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # --- Domain constants --------------------------------------------------------
 
-KINDS = ("Agent", "MCPServer", "Skill", "Prompt")
+KINDS = ("Agent", "MCPServer", "Skill", "Prompt", "Secret", "Deployment")
 
 ROLE_ADMIN = "admin"
 ROLE_PUBLISHER = "publisher"
@@ -52,6 +52,9 @@ class User(Base):
     display_name: Mapped[str | None] = mapped_column(String(255))
     is_platform_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Identity-provider link (OIDC / OAuth2 SSO). NULL for local accounts.
+    idp_provider: Mapped[str | None] = mapped_column(String(63))
+    idp_subject: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -139,6 +142,11 @@ class Resource(Base):
     visibility: Mapped[str] = mapped_column(String(15), nullable=False, server_default="internal")
     labels: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     description: Mapped[str | None] = mapped_column(Text)
+    # Mutable catalog metadata (icon/keywords/authors/license/links/...);
+    # changes do NOT create new versions.
+    catalog: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    # Runtime observations (conditions written by probes / controllers).
+    status: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -165,6 +173,7 @@ class ResourceVersion(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     tag: Mapped[str | None] = mapped_column(String(63))
     spec: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    change_notes: Mapped[str | None] = mapped_column(Text)
     published_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -246,3 +255,19 @@ class NotificationOutbox(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class SecretPayload(Base):
+    """Encrypted-at-rest values for Secret resources. One row per key;
+    plaintext never touches the database."""
+
+    __tablename__ = "secret_payloads"
+
+    resource_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True
+    )
+    key: Mapped[str] = mapped_column(String(253), primary_key=True)
+    ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )

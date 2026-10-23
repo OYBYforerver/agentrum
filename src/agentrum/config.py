@@ -32,6 +32,36 @@ class Settings(BaseSettings):
     notification_webhook_secret: str | None = None
     notification_interval_seconds: int = 10
 
+    # Secrets at rest: 32-byte url-safe base64 key (Fernet). Falls back to a
+    # key derived from secret_key with a loud warning when unset.
+    secret_encryption_key: str | None = None
+
+    # OIDC SSO. Generic provider uses discovery (issuer URL); Feishu is a
+    # built-in preset using its OAuth2 + userinfo endpoints.
+    oidc_generic_issuer: str | None = None
+    oidc_generic_client_id: str | None = None
+    oidc_generic_client_secret: str | None = None
+    oidc_generic_scopes: str = "openid profile email"
+    feishu_app_id: str | None = None
+    feishu_app_secret: str | None = None
+    oidc_redirect_base: str = "http://localhost:12122"
+
+    # Deployment controller (Phase B)
+    deploy_interval_seconds: int = 10
+    # Comma-separated image registry prefixes allowed for deployment, e.g.
+    # "registry.internal/,ghcr.io/acme/". Empty means allow-all (dev only).
+    image_allowlist: str = ""
+    ui_origin: str | None = None  # where OIDC callbacks redirect with the token
+
+    # Probes & maintenance
+    probe_interval_seconds: int = 60
+    audit_retention_days: int = 180
+    notification_retention_days: int = 30
+
+    # OpenTelemetry tracing (OTLP HTTP exporter), disabled by default
+    otel_enabled: bool = False
+    otel_endpoint: str = "http://localhost:4318/v1/traces"
+
 
 @lru_cache
 def get_settings() -> Settings:

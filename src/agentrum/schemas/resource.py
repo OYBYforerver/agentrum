@@ -10,12 +10,15 @@ class ResourceApplyIn(BaseModel):
     labels: dict[str, str] | None = None
     description: str | None = None
     visibility: Literal["internal", "restricted"] | None = None
+    catalog: dict[str, Any] | None = None
+    change_notes: str | None = None
 
 
 class ResourceVersionOut(BaseModel):
     version: int
     tag: str | None
     spec: dict[str, Any]
+    change_notes: str | None = None
     published_by: str
     created_at: datetime
 
@@ -27,6 +30,9 @@ class ResourceOut(BaseModel):
     visibility: str
     labels: dict[str, Any]
     description: str | None
+    catalog: dict[str, Any] = {}
+    status: dict[str, Any] = {}
+    secret_keys: list[str] | None = None
     created_by: str
     created_at: datetime
     updated_at: datetime

@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentrum import audit, errors
 from agentrum.db import models
-from agentrum.schemas.specs import validate_spec
-from agentrum.services import notification_service, team_service
+from agentrum.schemas.specs import validate_catalog, validate_spec
+from agentrum.services import notification_service, secret_service, team_service
 
 NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
@@ -122,6 +122,8 @@ async def apply(
 ) -> tuple[models.Resource, models.ResourceVersion, bool]:
     """Create or update a resource, appending an immutable version."""
     kind = normalize_kind(kind_raw)
+    if kind == "Secret":
+        return await _apply_secret(session, actor, namespace, name, data, source_ip=source_ip)
     spec = validate_spec(kind, data.spec)
     if not NAME_RE.match(name or ""):
         raise errors.ValidationError("resource name must be lowercase alphanumeric/'-', 2-253 chars")
@@ -129,11 +131,22 @@ async def apply(
         raise errors.ValidationError("tag must be 1-63 chars of letters, digits, '.', '_' or '-'")
     await _require_publish_role(session, actor, namespace)
 
+    if kind == "Deployment":
+        target = await _get_resource(
+            session, spec["target_kind"], spec["target_namespace"], spec["target_name"]
+        )
+        if target is None:
+            raise errors.ValidationError(
+                f"deployment target {spec['target_kind']}/{spec['target_namespace']}/"
+                f"{spec['target_name']} not found"
+            )
+
     now = datetime.now(UTC)
     resource = await _get_resource(session, kind, namespace, name, include_deleted=True)
     created = resource is None
 
     try:
+        catalog = validate_catalog(data.catalog)
         if created:
             resource = models.Resource(
                 kind=kind,
@@ -142,6 +155,7 @@ async def apply(
                 visibility=data.visibility or models.VISIBILITY_INTERNAL,
                 labels=data.labels or {},
                 description=data.description,
+                catalog=catalog,
                 created_by=actor.id,
             )
             session.add(resource)
@@ -154,6 +168,8 @@ async def apply(
                 resource.description = data.description
             if data.visibility is not None:
                 resource.visibility = data.visibility
+            if data.catalog is not None:
+                resource.catalog = catalog
 
         if data.tag is not None:
             dup = (
@@ -180,6 +196,7 @@ async def apply(
             version=max_version + 1,
             tag=data.tag,
             spec=spec,
+            change_notes=data.change_notes,
             published_by=actor.id,
         )
         session.add(rv)
@@ -200,8 +217,55 @@ async def apply(
         raise errors.ConflictError("concurrent modification, please retry") from exc
 
     await session.refresh(resource)
-    await session.refresh(rv)
+    if rv is not None:
+        await session.refresh(rv)
     return resource, rv, created
+
+
+async def _apply_secret(
+    session: AsyncSession, actor: models.User, namespace: str, name: str, data,
+    source_ip: str | None = None,
+) -> tuple[models.Resource, None, bool]:
+    """Secret resources: encrypted key/value payload, no versions, values
+    never leave the database unencrypted."""
+    payload = (data.spec or {}).get("data")
+    if not isinstance(payload, dict) or not payload:
+        raise errors.ValidationError("Secret spec must be {\"data\": {<key>: <value>}}")
+    if any(not isinstance(k, str) or not isinstance(v, str) for k, v in payload.items()):
+        raise errors.ValidationError("Secret data keys and values must be strings")
+    if not NAME_RE.match(name or ""):
+        raise errors.ValidationError("resource name must be lowercase alphanumeric/'-', 2-253 chars")
+    await _require_publish_role(session, actor, namespace)
+
+    resource = await _get_resource(session, "Secret", namespace, name, include_deleted=True)
+    created = resource is None
+    if created:
+        resource = models.Resource(
+            kind="Secret",
+            namespace=namespace,
+            name=name,
+            visibility=data.visibility or models.VISIBILITY_RESTRICTED,
+            labels=data.labels or {},
+            description=data.description,
+            created_by=actor.id,
+        )
+        session.add(resource)
+        await session.flush()
+    else:
+        resource.deleted_at = None
+        if data.visibility is not None:
+            resource.visibility = data.visibility
+        if data.description is not None:
+            resource.description = data.description
+
+    await secret_service.set_payloads(session, resource.id, payload)
+    await audit.record(
+        session, actor=actor, action="secret.set", kind="Secret", namespace=namespace,
+        name=name, detail={"keys": sorted(payload)}, source_ip=source_ip,
+    )
+    await session.commit()
+    await session.refresh(resource)
+    return resource, None, created
 
 
 async def list_resources(
@@ -304,5 +368,9 @@ async def delete_resource(
     await audit.record(
         session, actor=actor, action="resource.delete", kind=kind, namespace=namespace, name=name,
         source_ip=source_ip,
+    )
+    # Cascade: active subscribers are told about the deletion (impact awareness).
+    await notification_service.enqueue_resource_deleted(
+        session, resource, actor_name=actor.username
     )
     await session.commit()

@@ -13,14 +13,36 @@ class BaseSpec(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class SecretRef(BaseModel):
+    """Reference to a Secret resource: {name, key, namespace?}."""
+
+    name: str
+    key: str
+    namespace: str | None = None
+
+
+class EnvVar(BaseSpec):
+    name: str
+    value: str | None = None
+    value_from: SecretRef | None = None
+
+    @model_validator(mode="after")
+    def _either_value_or_ref(self) -> "EnvVar":
+        if (self.value is None) == (self.value_from is None):
+            raise ValueError("env var needs exactly one of 'value' or 'value_from'")
+        return self
+
+
 class AgentSpec(BaseSpec):
     image: str
+    env: list[EnvVar] = []
 
 
 class MCPServerSpec(BaseSpec):
     transport: Literal["streamable-http", "sse", "stdio"]
     endpoint: HttpUrl | None = None
     command: str | None = None
+    env: list[EnvVar] = []
 
     @model_validator(mode="after")
     def _check_transport_target(self) -> "MCPServerSpec":
@@ -40,17 +62,53 @@ class PromptSpec(BaseSpec):
     template: str
 
 
+class DeploymentSpec(BaseSpec):
+    """Desired state for running a published resource on a runtime."""
+
+    target_kind: Literal["Agent", "MCPServer"]
+    target_namespace: str
+    target_name: str
+    tag: str | None = None  # pin a version tag; default = latest
+    cluster_namespace: str = "default"
+    replicas: int = 1
+    runtime: Literal["kubernetes"] = "kubernetes"
+    image_pull_policy: Literal["IfNotPresent", "Always", "Never"] = "IfNotPresent"
+    port: int = 8000
+
+
+class CatalogInfo(BaseModel):
+    """Mutable catalog metadata. Field names follow package-registry
+    conventions (npm/PyPI); MCPServer entries additionally align with the
+    MCP Registry server.json shape."""
+
+    model_config = ConfigDict(extra="allow")
+
+    title: str | None = None
+    long_description: str | None = None
+    icon: HttpUrl | None = None
+    keywords: list[str] = []
+    authors: list[str] = []
+    license: str | None = None
+    links: dict[str, HttpUrl] = {}
+
+
 SPEC_MODELS: dict[str, type[BaseSpec]] = {
     "Agent": AgentSpec,
     "MCPServer": MCPServerSpec,
     "Skill": SkillSpec,
     "Prompt": PromptSpec,
+    "Deployment": DeploymentSpec,
 }
 
 
 def validate_spec(kind: str, spec: Any) -> dict:
     """Validate `spec` against its kind. Returns the normalized dict for
-    storage; raises ValidationError (domain) on failure."""
+    storage; raises ValidationError (domain) on failure.
+
+    Secrets are handled by the secrets service (their payload is encrypted,
+    not stored as spec)."""
+    if kind == "Secret":
+        raise errors.ValidationError("Secret resources use the /v1/secrets API")
     model = SPEC_MODELS.get(kind)
     if model is None:
         raise errors.ValidationError(f"no spec schema registered for kind {kind!r}")
@@ -63,3 +121,16 @@ def validate_spec(kind: str, spec: Any) -> dict:
         loc = ".".join(str(p) for p in first.get("loc", []))
         raise errors.ValidationError(f"invalid {kind} spec at '{loc}': {first['msg']}") from exc
     return parsed.model_dump(mode="json")
+
+
+def validate_catalog(catalog: Any) -> dict:
+    if catalog is None:
+        return {}
+    if not isinstance(catalog, dict):
+        raise errors.ValidationError("catalog must be a JSON object")
+    try:
+        return CatalogInfo.model_validate(catalog).model_dump(mode="json", exclude_none=True)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        loc = ".".join(str(p) for p in first.get("loc", []))
+        raise errors.ValidationError(f"invalid catalog at '{loc}': {first['msg']}") from exc

@@ -109,6 +109,31 @@ async def remove_member(
     await team_service.remove_member(session, user, team, username, source_ip=_client_ip(request))
 
 
+@router.get("/{team_name}/consumers", response_model=list[dict])
+async def list_consumers(
+    team_name: str,
+    user: models.User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Consumer graph: teams actively subscribing to this team's content
+    (impact analysis before deprecating anything)."""
+    from agentrum.services import notification_service
+
+    team = await team_service.get_team(session, team_name)
+    await team_service.require_member(session, user, team)
+    rows = await notification_service.list_consumers(session, team_name)
+    return [
+        {
+            "subscriber_team": subscriber,
+            "kind": sub.kind,
+            "namespace": sub.namespace,
+            "name": sub.name,
+            "since": sub.created_at.isoformat(),
+        }
+        for subscriber, sub in rows
+    ]
+
+
 # Domain errors are surfaced as clean 4xx responses here to keep routers thin.
 def install_error_handlers(app) -> None:  # pragma: no cover
     from fastapi.responses import JSONResponse

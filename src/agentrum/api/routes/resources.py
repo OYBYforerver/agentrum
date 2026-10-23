@@ -10,7 +10,7 @@ from agentrum.schemas.resource import (
     ResourceOut,
     ResourceVersionOut,
 )
-from agentrum.services import resource_service, team_service
+from agentrum.services import resource_service, secret_service, team_service
 
 router = APIRouter()
 
@@ -27,6 +27,9 @@ async def _serialize(session: AsyncSession, resources, latest) -> list[ResourceO
     out = []
     for r in resources:
         rv = latest.get(r.id)
+        secret_keys = None
+        if r.kind == "Secret":
+            secret_keys = sorted((await secret_service.get_payloads(session, r.id)).keys())
         out.append(
             ResourceOut(
                 kind=r.kind,
@@ -35,6 +38,9 @@ async def _serialize(session: AsyncSession, resources, latest) -> list[ResourceO
                 visibility=r.visibility,
                 labels=r.labels or {},
                 description=r.description,
+                catalog=r.catalog or {},
+                status=r.status or {},
+                secret_keys=secret_keys,
                 created_by=names.get(r.created_by, str(r.created_by)),
                 created_at=r.created_at,
                 updated_at=r.updated_at,
@@ -44,6 +50,7 @@ async def _serialize(session: AsyncSession, resources, latest) -> list[ResourceO
                         version=rv.version,
                         tag=rv.tag,
                         spec=rv.spec or {},
+                        change_notes=rv.change_notes,
                         published_by=names.get(rv.published_by, str(rv.published_by)),
                         created_at=rv.created_at,
                     )
@@ -70,6 +77,22 @@ async def apply_resource(
         session, user, kind, namespace, name, body, source_ip=_client_ip(request)
     )
     response.status_code = 201 if created else 200
+    if rv is None:  # Secret: no versions, values never leave the database
+        names = await team_service.usernames(session, [resource.created_by])
+        return ResourceOut(
+            kind=resource.kind,
+            namespace=resource.namespace,
+            name=resource.name,
+            visibility=resource.visibility,
+            labels=resource.labels or {},
+            description=resource.description,
+            catalog=resource.catalog or {},
+            status=resource.status or {},
+            secret_keys=sorted((await secret_service.get_payloads(session, resource.id)).keys()),
+            created_by=names.get(resource.created_by, str(resource.created_by)),
+            created_at=resource.created_at,
+            updated_at=resource.updated_at,
+        )
     names = await team_service.usernames(session, [resource.created_by, rv.published_by])
     return ResourceOut(
         kind=resource.kind,
@@ -78,6 +101,8 @@ async def apply_resource(
         visibility=resource.visibility,
         labels=resource.labels or {},
         description=resource.description,
+        catalog=resource.catalog or {},
+        status=resource.status or {},
         created_by=names.get(resource.created_by, str(resource.created_by)),
         created_at=resource.created_at,
         updated_at=resource.updated_at,
@@ -85,6 +110,7 @@ async def apply_resource(
             version=rv.version,
             tag=rv.tag,
             spec=rv.spec or {},
+            change_notes=rv.change_notes,
             published_by=names.get(rv.published_by, str(rv.published_by)),
             created_at=rv.created_at,
         ),
