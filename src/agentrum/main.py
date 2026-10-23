@@ -17,6 +17,7 @@ from agentrum.db import models
 from agentrum.db.engine import SessionLocal
 from agentrum.logging_setup import configure_logging
 from agentrum.services import (
+    git_service,
     maintenance_service,
     notification_dispatcher,
     probe_service,
@@ -61,6 +62,7 @@ async def lifespan(_app: FastAPI):
         deployments_reconciler.start_controller(),
         probe_service.start_prober(),
         maintenance_service.start_maintenance(),
+        git_service.start_drift_checker(),
     ]
     try:
         yield

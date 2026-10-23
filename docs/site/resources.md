@@ -30,7 +30,7 @@ catalog:                       # 目录元数据(可变,不产生新版本)
 |---|---|---|---|
 | `Agent` | `image` | `framework`、`env[]` | env 项:`{name, value}` 或 `{name, value_from: {secret_ref: {name, key, namespace?}}}` |
 | `MCPServer` | `transport` +(`endpoint` 或 `command`) | `env[]` | transport ∈ `streamable-http / sse / stdio`;http 类必须给 endpoint,stdio 必须给 command |
-| `Skill` | — | `entrypoint`、`instructions` | git 来源模式(`source.git`)规划中 |
+| `Skill` | `source.git.url` 或 `instructions`(二选一) | `entrypoint`、`source.git.ref/subdirectory/credentials_ref` | git 来源见下节 |
 | `Prompt` | `template` | 变量声明规划中 | **仅本项目可见**;跨项目订阅直接拒绝 |
 | `Secret` | `data`(键值对象) | — | 值信封加密,永不回显;默认 `restricted` |
 | `Deployment` | `target_kind/target_namespace/target_name` | `tag`(锁定版本)、`cluster_namespace`、`replicas`、`port`、`image_pull_policy` | 见《部署接入》 |
@@ -58,3 +58,22 @@ spec:
 | `private`(仅 Prompt) | 仅属主项目成员 | 不允许 |
 
 发布需要属主命名空间的 `publisher`/`admin` 角色,或具备 `publish` scope 的项目 AK/SK。版本号单调递增,tag 不可变;软删除后重新发布即恢复。
+
+## Skill 的 git 来源
+
+技能正文推荐放在 git,注册中心存“指针 + 锁定的 commit SHA”:
+
+```yaml
+kind: Skill
+metadata: {name: gateway-skill, namespace: payment}
+spec:
+  source:
+    git:
+      url: https://git.internal/pay/skills.git
+      ref: main                      # 分支 / tag / 完整 commit SHA
+      subdirectory: skills/gateway   # 可选:仓库内子目录
+      credentials_ref: git-creds     # 可选:私有仓库凭据(Secret,含 username/password 或 token)
+  entrypoint: SKILL.md               # 可选:仓库内入口文件
+```
+
+发布时服务端把 `ref` **解析为 commit SHA 并锁定进不可变版本**——即使 `ref` 写的是分支,版本记录的也是发布那一刻的位置;解析失败(仓库不可达、ref 不存在、凭据无效)会直接阻断发布。后台漂移检测(`ARK_SKILL_DRIFT_INTERVAL_SECONDS`,默认 300s,0 关闭)发现上游移动时在资源状态标记 `UpstreamDrift`,**不会自动改版本**——重新发布即追平。SSH 协议暂不支持,HTTPS + 令牌凭据即可覆盖内部 GitLab/GitHub。

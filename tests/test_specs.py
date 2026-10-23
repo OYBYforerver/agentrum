@@ -31,3 +31,17 @@ def test_prompt_requires_template_and_unknown_kind():
 def test_spec_must_be_object():
     with pytest.raises(errors.ValidationError):
         validate_spec("Skill", "just-a-string")
+
+
+def test_skill_git_source_contract():
+    # both modes at once → rejected
+    with pytest.raises(errors.ValidationError):
+        validate_spec("Skill", {"source": {"git": {"url": "https://x/r.git"}}, "instructions": "y"})
+    # neither → rejected
+    with pytest.raises(errors.ValidationError):
+        validate_spec("Skill", {})
+    # git mode passes through with ref
+    ok = validate_spec("Skill", {"source": {"git": {"url": "https://x/r.git", "ref": "v1"}}})
+    assert ok["source"]["git"]["ref"] == "v1"
+    # inline mode still works
+    assert validate_spec("Skill", {"instructions": "do"})["instructions"] == "do"

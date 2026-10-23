@@ -34,6 +34,10 @@ const KIND_FIELDS: Record<string, { key: string; labelKey: string; placeholder?:
     { key: "command", labelKey: "command" },
   ],
   Skill: [
+    { key: "source_url", labelKey: "source_url", placeholder: "https://git.internal/pay/skills.git" },
+    { key: "source_ref", labelKey: "source_ref", placeholder: "main / v1.2.0 / commit-sha" },
+    { key: "source_subdirectory", labelKey: "source_subdirectory", placeholder: "skills/gateway" },
+    { key: "source_credentials_ref", labelKey: "source_credentials_ref", placeholder: "git-creds (Secret)" },
     { key: "entrypoint", labelKey: "entrypoint", placeholder: "SKILL.md" },
     { key: "instructions", labelKey: "instructions" },
   ],
@@ -63,6 +67,13 @@ function buildSpec(kind: string, form: FormData): Record<string, unknown> {
   }
   if (kind === "Skill") {
     const s: Record<string, unknown> = {};
+    if (val("f_source_url")) {
+      const git: Record<string, unknown> = { url: val("f_source_url") };
+      if (val("f_source_ref")) git.ref = val("f_source_ref");
+      if (val("f_source_subdirectory")) git.subdirectory = val("f_source_subdirectory");
+      if (val("f_source_credentials_ref")) git.credentials_ref = val("f_source_credentials_ref");
+      s.source = { git };
+    }
     if (val("f_entrypoint")) s.entrypoint = val("f_entrypoint");
     if (val("f_instructions")) s.instructions = val("f_instructions");
     return s;

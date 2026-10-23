@@ -143,6 +143,10 @@
     "target_namespace": "Target namespace",
     "target_name": "Target name",
     "cluster_namespace": "Cluster namespace",
-    "replicas": "Replicas"
+    "replicas": "Replicas",
+    "source_url": "Git repository URL (or leave empty for inline)",
+    "source_ref": "Branch / Tag / Commit",
+    "source_subdirectory": "Subdirectory in repo (optional)",
+    "source_credentials_ref": "Credentials Secret name (private repos)"
   }
 }

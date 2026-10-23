@@ -12,7 +12,7 @@ from agentrum import audit, errors
 from agentrum.auth.ak_context import ak_project_id, has_scope
 from agentrum.db import models
 from agentrum.schemas.specs import validate_catalog, validate_spec
-from agentrum.services import notification_service, secret_service, team_service
+from agentrum.services import git_service, notification_service, secret_service, team_service
 
 NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
@@ -138,17 +138,25 @@ async def apply(
     kind = normalize_kind(kind_raw)
     if kind == "Secret":
         return await _apply_secret(session, actor, namespace, name, data, source_ip=source_ip)
-    spec = validate_spec(kind, data.spec)
     if not NAME_RE.match(name or ""):
         raise errors.ValidationError("resource name must be lowercase alphanumeric/'-', 2-253 chars")
     if data.tag is not None and not TAG_RE.match(data.tag):
         raise errors.ValidationError("tag must be 1-63 chars of letters, digits, '.', '_' or '-'")
+    # Authorization first: unauthorized callers never see schema details.
     await _require_publish_role(session, actor, namespace)
+    spec = validate_spec(kind, data.spec)
 
     # Prompts are project-private: visibility is forced, cross-project sharing
     # (subscriptions) is rejected at the subscription layer.
     if kind == "Prompt":
         data.visibility = models.VISIBILITY_PRIVATE
+
+    # Git-backed skills: resolve the ref to a commit SHA at publish time so
+    # the immutable version pins exact upstream content. Failure blocks publish.
+    if kind == "Skill" and (spec.get("source") or {}).get("git"):
+        spec["source"]["git"] = await git_service.resolve_git_source(
+            session, namespace, spec["source"]["git"]
+        )
 
     if kind == "Deployment":
         target = await _get_resource(

@@ -143,6 +143,10 @@
     "target_namespace": "目标命名空间",
     "target_name": "目标名称",
     "cluster_namespace": "集群命名空间",
-    "replicas": "副本数"
+    "replicas": "副本数",
+    "source_url": "Git 仓库地址(或留空用下方直录)",
+    "source_ref": "分支 / Tag / Commit",
+    "source_subdirectory": "仓库内子目录(可选)",
+    "source_credentials_ref": "凭据 Secret 名称(私有仓库可选)"
   }
 }

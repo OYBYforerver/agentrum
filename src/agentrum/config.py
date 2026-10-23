@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     probe_interval_seconds: int = 60
     audit_retention_days: int = 180
     notification_retention_days: int = 30
+    skill_drift_interval_seconds: int = 300  # git-sourced skill upstream check (0 disables)
 
     # OpenTelemetry tracing (OTLP HTTP exporter), disabled by default
     otel_enabled: bool = False

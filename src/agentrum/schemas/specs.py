@@ -57,9 +57,34 @@ class MCPServerSpec(BaseSpec):
         return self
 
 
+class GitSource(BaseModel):
+    """Git-backed skill content. The ref is resolved to a commit SHA at
+    publish time and the SHA is locked into the immutable version."""
+
+    url: str
+    ref: str = "HEAD"
+    subdirectory: str | None = None
+    credentials_ref: str | None = None  # Secret resource holding username/password
+
+
+class SkillSource(BaseModel):
+    git: GitSource
+
+
 class SkillSpec(BaseSpec):
     entrypoint: str | None = None
     instructions: str | None = None
+    source: SkillSource | None = None
+
+    @model_validator(mode="after")
+    def _one_source_mode(self) -> "SkillSpec":
+        has_git = self.source is not None and bool(self.source.git.url)
+        has_content = bool(self.instructions)
+        if has_git and has_content:
+            raise ValueError("use either source.git or inline instructions, not both")
+        if not has_git and not has_content:
+            raise ValueError("a skill needs source.git or inline instructions")
+        return self
 
 
 class PromptSpec(BaseSpec):
