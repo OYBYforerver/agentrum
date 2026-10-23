@@ -129,13 +129,21 @@ agentrum/
 | `ARK_ACCESS_TOKEN_EXPIRE_MINUTES` | `480` | 登录会话有效期 |
 | `ARK_BOOTSTRAP_ADMIN_USERNAME` | `admin` | 首次启动创建的平台管理员 |
 | `ARK_BOOTSTRAP_ADMIN_PASSWORD` | `admin123` | 同上,**生产必须修改** |
+| `ARK_ALLOWED_ORIGINS` | `*` | CORS 来源,逗号分隔;生产务必收敛 |
+| `ARK_LOG_FORMAT` | `console` | 日志格式:`console` / `json`(生产建议 json) |
+| `ARK_MAX_BODY_BYTES` | `2097152` | 请求体大小上限(2 MiB) |
+| `ARK_FEISHU_WEBHOOK_URL` | 空 | 飞书群自定义机器人 webhook,配置后推送订阅事件 |
+| `ARK_FEISHU_WEBHOOK_SECRET` | 空 | 机器人签名密钥(可选) |
+| `ARK_NOTIFICATION_WEBHOOK_URL` | 空 | 通用 webhook(HMAC 签名头 `X-Agentrum-Signature`) |
 
 ## 路线图
 
-- [x] **M1(当前)**:本地账号认证、团队/命名空间、资源发布与版本、订阅与审批、审计日志
-- [ ] **M2**:版本变更通知(webhook / IM)、 OIDC/SSO 对接、Postgres 行级可见性优化、CI 测试矩阵
-- [ ] **M3**:部署控制器(Docker 适配器优先,K8s 随后)、CLI(`agentrum apply/get`)、注册中心 MCP Server 工具面
-- [ ] **M4**:Next.js 管理界面(登录/团队/订阅管理)、镜像漏洞扫描与签名验签、Helm Chart
+完整路线图与决策记录见 [docs/ROADMAP.md](docs/ROADMAP.md)。里程碑:
+
+- [x] **M1**:本地账号认证、团队/命名空间、资源发布与版本、订阅与审批、审计日志
+- [ ] **阶段 A(进行中)**:安全加固(限流/CORS/readyz/结构化日志)、用户治理、飞书订阅通知、CI
+- [ ] **阶段 B**:OIDC SSO(飞书 Provider)、K8s 部署控制器 + Secret 管理、双语 UI、搜索、可观测性
+- [ ] **阶段 C**:开源发布(双语文档站、发布流水线、多环境提升)
 
 ## License
 

@@ -1,12 +1,15 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agentrum import audit
 from agentrum.auth import security
 from agentrum.auth.deps import get_current_user
+from agentrum.auth.ratelimit import FailureLockout, SlidingWindowLimiter
+from agentrum.config import get_settings
 from agentrum.db import models
 from agentrum.db.engine import get_session
 from agentrum.schemas.auth import (
@@ -15,10 +18,22 @@ from agentrum.schemas.auth import (
     ApiTokenOut,
     LoginIn,
     MeOut,
+    PasswordChangeIn,
     TokenOut,
 )
 
 router = APIRouter()
+
+_settings = get_settings()
+_login_limiter = SlidingWindowLimiter(
+    max_events=_settings.login_max_per_window,
+    window_seconds=_settings.login_window_seconds,
+)
+_lockout = FailureLockout(
+    threshold=_settings.lockout_threshold,
+    window_seconds=_settings.lockout_seconds,
+    lock_seconds=_settings.lockout_seconds,
+)
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -26,13 +41,50 @@ def _iso(dt: datetime | None) -> str | None:
 
 
 @router.post("/login", response_model=TokenOut)
-async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> TokenOut:
+async def login(
+    body: LoginIn, request: Request, session: AsyncSession = Depends(get_session)
+) -> TokenOut:
+    ip = request.client.host if request.client else "unknown"
+    key = f"{body.username}|{ip}"
+
+    locked_for = _lockout.is_locked(key)
+    if locked_for:
+        raise HTTPException(
+            status_code=429,
+            detail=f"account temporarily locked, retry in {locked_for}s",
+        )
+    if not _login_limiter.allow(ip):
+        raise HTTPException(status_code=429, detail="too many login attempts, slow down")
+
     user = (
         await session.execute(select(models.User).where(models.User.username == body.username))
     ).scalar_one_or_none()
     if user is None or not security.verify_password(body.password, user.password_hash):
+        _lockout.record_failure(key)
         raise HTTPException(status_code=401, detail="invalid username or password")
+    if user.disabled_at is not None:
+        raise HTTPException(status_code=403, detail="account is disabled")
+    _lockout.reset(key)
     return TokenOut(access_token=security.create_access_token(user.id))
+
+
+@router.post("/change-password", status_code=204)
+async def change_password(
+    body: PasswordChangeIn,
+    request: Request,
+    user: models.User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    if not security.verify_password(body.old_password, user.password_hash):
+        raise HTTPException(status_code=403, detail="old password incorrect")
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="new password must be at least 8 chars")
+    user.password_hash = security.hash_password(body.new_password)
+    await audit.record(
+        session, actor=user, action="user.change_password",
+        source_ip=request.client.host if request.client else None,
+    )
+    await session.commit()
 
 
 @router.get("/me", response_model=MeOut)

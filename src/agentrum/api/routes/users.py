@@ -1,10 +1,13 @@
 """User management (platform admin only in the MVP)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agentrum import audit
 from agentrum.auth import security
 from agentrum.auth.deps import require_platform_admin
 from agentrum.db import models
@@ -19,11 +22,18 @@ class UserCreateIn(BaseModel):
     display_name: str | None = None
 
 
+class UserPatchIn(BaseModel):
+    display_name: str | None = None
+    disabled: bool | None = None
+    is_platform_admin: bool | None = None
+
+
 class UserOut(BaseModel):
     id: str
     username: str
     display_name: str | None
     is_platform_admin: bool
+    disabled: bool = False
 
 
 @router.post("", response_model=UserOut, status_code=201)
@@ -57,6 +67,50 @@ async def create_user(
     )
 
 
+@router.patch("/{username}", response_model=UserOut)
+async def patch_user(
+    username: str,
+    body: UserPatchIn,
+    request: Request,
+    admin: models.User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> UserOut:
+    user = (
+        await session.execute(select(models.User).where(models.User.username == username))
+    ).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    if user.id == admin.id and body.disabled is True:
+        raise HTTPException(status_code=400, detail="cannot disable your own account")
+
+    if body.display_name is not None:
+        user.display_name = body.display_name
+    if body.is_platform_admin is not None:
+        user.is_platform_admin = body.is_platform_admin
+    if body.disabled is not None:
+        if body.disabled:
+            user.disabled_at = datetime.now(UTC)
+            # Disabled users lose API access immediately.
+            await session.execute(
+                update(models.ApiToken)
+                .where(models.ApiToken.user_id == user.id, models.ApiToken.revoked_at.is_(None))
+                .values(revoked_at=datetime.now(UTC))
+            )
+        else:
+            user.disabled_at = None
+    await audit.record(
+        session, actor=admin, action="user.update", detail={
+            "user": username,
+            "disabled": body.disabled,
+            "is_platform_admin": body.is_platform_admin,
+        },
+        source_ip=request.client.host if request.client else None,
+    )
+    await session.commit()
+    await session.refresh(user)
+    return _to_out(user)
+
+
 @router.get("", response_model=list[UserOut])
 async def list_users(
     _admin: models.User = Depends(require_platform_admin),
@@ -65,10 +119,14 @@ async def list_users(
     rows = (
         await session.execute(select(models.User).order_by(models.User.username))
     ).scalars().all()
-    return [
-        UserOut(
-            id=str(u.id), username=u.username, display_name=u.display_name,
-            is_platform_admin=u.is_platform_admin,
-        )
-        for u in rows
-    ]
+    return [_to_out(u) for u in rows]
+
+
+def _to_out(u: models.User) -> UserOut:
+    return UserOut(
+        id=str(u.id),
+        username=u.username,
+        display_name=u.display_name,
+        is_platform_admin=u.is_platform_admin,
+        disabled=u.disabled_at is not None,
+    )

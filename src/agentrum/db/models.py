@@ -51,6 +51,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str | None] = mapped_column(String(255))
     is_platform_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -221,3 +222,27 @@ class AuditLog(Base):
     name: Mapped[str | None] = mapped_column(String(253))
     detail: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     source_ip: Mapped[str | None] = mapped_column(String(64))
+
+
+# --- Notifications ------------------------------------------------------------
+
+
+class NotificationOutbox(Base):
+    """Transactional outbox: events are committed with the state that caused
+    them, then delivered by a background dispatcher."""
+
+    __tablename__ = "notification_outbox"
+    __table_args__ = (Index("ix_outbox_status_next", "status", "next_attempt_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    event_type: Mapped[str] = mapped_column(String(63), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(15), nullable=False, server_default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_error: Mapped[str | None] = mapped_column(Text)

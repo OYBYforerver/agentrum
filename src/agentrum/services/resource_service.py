@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentrum import audit, errors
 from agentrum.db import models
-from agentrum.services import team_service
+from agentrum.schemas.specs import validate_spec
+from agentrum.services import notification_service, team_service
 
 NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
@@ -121,6 +122,7 @@ async def apply(
 ) -> tuple[models.Resource, models.ResourceVersion, bool]:
     """Create or update a resource, appending an immutable version."""
     kind = normalize_kind(kind_raw)
+    spec = validate_spec(kind, data.spec)
     if not NAME_RE.match(name or ""):
         raise errors.ValidationError("resource name must be lowercase alphanumeric/'-', 2-253 chars")
     if data.tag is not None and not TAG_RE.match(data.tag):
@@ -177,7 +179,7 @@ async def apply(
             resource_id=resource.id,
             version=max_version + 1,
             tag=data.tag,
-            spec=data.spec,
+            spec=spec,
             published_by=actor.id,
         )
         session.add(rv)
@@ -186,6 +188,11 @@ async def apply(
         await audit.record(
             session, actor=actor, action="resource.publish", kind=kind, namespace=namespace,
             name=name, detail={"version": rv.version, "tag": data.tag}, source_ip=source_ip,
+        )
+        # Transactional outbox: subscribers learn about the new version in the
+        # same commit that creates it.
+        await notification_service.enqueue_resource_published(
+            session, resource, rv, publisher_name=actor.username
         )
         await session.commit()
     except IntegrityError as exc:

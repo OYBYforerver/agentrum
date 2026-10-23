@@ -6,6 +6,11 @@ class LoginIn(BaseModel):
     password: str
 
 
+class PasswordChangeIn(BaseModel):
+    old_password: str
+    new_password: str
+
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"

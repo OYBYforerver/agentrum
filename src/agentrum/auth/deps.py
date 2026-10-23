@@ -38,13 +38,14 @@ async def _resolve_credential(session: AsyncSession, credential: str) -> models.
     if row.expires_at is not None and row.expires_at < now:
         return None
     user = await session.get(models.User, row.user_id)
-    if user is not None:
-        await session.execute(
-            update(models.ApiToken)
-            .where(models.ApiToken.id == row.id)
-            .values(last_used_at=now)
-        )
-        await session.commit()
+    if user is None or user.disabled_at is not None:
+        return None
+    await session.execute(
+        update(models.ApiToken)
+        .where(models.ApiToken.id == row.id)
+        .values(last_used_at=now)
+    )
+    await session.commit()
     return user
 
 
@@ -65,6 +66,8 @@ async def get_current_user(
             detail="Invalid or expired credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if user.disabled_at is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
     return user
 
 
