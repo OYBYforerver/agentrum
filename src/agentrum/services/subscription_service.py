@@ -112,16 +112,38 @@ async def approve(
 async def revoke(
     session: AsyncSession, actor: models.User, sub_id: uuid.UUID, source_ip: str | None = None
 ) -> models.Subscription:
+    """Revoke a subscription. Allowed for: the subscriber team, the team that
+    owns the target namespace (grant revocation), or a platform admin."""
     sub = await _get_sub(session, sub_id)
     if sub.status == models.SUB_REVOKED:
         raise errors.ConflictError("subscription already revoked")
-    subscriber_team = await session.get(models.Team, sub.subscriber_team_id)
-    if subscriber_team is not None and not actor.is_platform_admin:
-        await team_service.require_member(session, actor, subscriber_team)
+
+    allowed = actor.is_platform_admin
+    revoked_by = "subscriber"
+    if not allowed:
+        subscriber_team = await session.get(models.Team, sub.subscriber_team_id)
+        if subscriber_team is not None:
+            try:
+                await team_service.require_member(session, actor, subscriber_team)
+                allowed = True
+            except errors.PermissionDeniedError:
+                allowed = False
+    if not allowed:
+        ns = await session.get(models.Namespace, sub.namespace)
+        if ns is not None:
+            role = await team_service.get_team_role(session, actor.id, ns.team_id)
+            if role == models.ROLE_ADMIN:
+                allowed = True
+                revoked_by = "owner"
+    if not allowed:
+        raise errors.PermissionDeniedError(
+            "only the subscriber or the target project's admin can revoke"
+        )
+
     sub.status = models.SUB_REVOKED
     await audit.record(
         session, actor=actor, action="subscription.revoke", kind=sub.kind,
-        namespace=sub.namespace, name=sub.name, detail={"subscription": str(sub.id)},
+        namespace=sub.namespace, name=sub.name, detail={"subscription": str(sub.id), "by": revoked_by},
         source_ip=source_ip,
     )
     await session.commit()

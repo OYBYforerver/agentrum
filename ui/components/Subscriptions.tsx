@@ -100,7 +100,6 @@ function SearchSelect({
 export default function Subscriptions({ project }: { project: string }) {
   const { t } = useTranslation();
   const [mine, setMine] = useState<SubRow[]>([]);
-  const [pending, setPending] = useState<SubRow[]>([]);
   const [error, setError] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [kindSel, setKindSel] = useState("MCPServer");
@@ -112,10 +111,7 @@ export default function Subscriptions({ project }: { project: string }) {
     try {
       const mineData = await api<{ items: SubRow[] }>(`/v1/teams/${project}/subscriptions`);
       setMine(mineData.items);
-      const pendingData = await api<{ items: SubRow[] }>(
-        `/v1/teams/${project}/subscriptions/pending`
-      );
-      setPending(pendingData.items);
+
     } catch (e) {
       setError(String(e).replace("Error: ", ""));
     }
@@ -160,11 +156,6 @@ export default function Subscriptions({ project }: { project: string }) {
     }
   }
 
-  async function decide(id: string, approve: boolean) {
-    await api(`/v1/subscriptions/${id}/${approve ? "approve" : "reject"}`, { method: "POST" });
-    void load();
-  }
-
   async function revoke(id: string) {
     await api(`/v1/subscriptions/${id}`, { method: "DELETE" });
     void load();
@@ -173,43 +164,6 @@ export default function Subscriptions({ project }: { project: string }) {
   return (
     <div style={{ display: "grid", gap: 24 }}>
       {error && <p className="error">{error}</p>}
-
-      <div>
-        <div style={{ display: "flex", marginBottom: 12 }}>
-          <h3 style={{ margin: 0, flex: 1 }}>{t("subs.pending")}</h3>
-        </div>
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <table>
-            <tbody>
-              {pending.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <strong>{s.subscriber_team}</strong>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      {s.kind} {s.namespace}/{s.name}
-                    </div>
-                  </td>
-                  <td style={{ width: 180, textAlign: "right" }}>
-                    <button className="primary" onClick={() => void decide(s.id, true)}>
-                      {t("subs.approve")}
-                    </button>{" "}
-                    <button className="danger" onClick={() => void decide(s.id, false)}>
-                      {t("subs.reject")}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {pending.length === 0 && (
-                <tr>
-                  <td className="muted" style={{ textAlign: "center", padding: 20 }}>
-                    {t("subs.noPending")}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       <div>
         <div style={{ display: "flex", marginBottom: 12 }}>

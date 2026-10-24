@@ -277,3 +277,63 @@ def test_access_keys_and_prompt_privacy():  # pragma: no cover
             assert r.status_code == 403, r.text
 
     _run(inner())
+
+
+def test_owner_can_revoke_grant():  # pragma: no cover
+    """Owner-side grant revocation: approve a restricted subscription, then
+    the OWNER team's admin revokes it — subscriber loses access at once."""
+    import asyncio
+
+    import httpx
+    from httpx import ASGITransport
+
+    from agentrum.main import _ensure_bootstrap_admin
+
+    async def inner():
+        await _ensure_bootstrap_admin()
+        sfx = _suffix()
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=__import__("agentrum.main", fromlist=["app"]).app),
+            base_url="http://test",
+        ) as c:
+            r = await c.post("/v1/auth/login", json={"username": "admin", "password": "admin123"})
+            admin = {"Authorization": f"Bearer {r.json()['access_token']}"}
+            owner, sub = f"gv-owner-{sfx}", f"gv-sub-{sfx}"
+            for t in (owner, sub):
+                await c.post("/v1/teams", headers=admin, json={"name": t})
+            await c.post("/v1/users", headers=admin, json={"username": f"gv-u-{sfx}", "password": "password-123"})
+            await c.post(f"/v1/teams/{sub}/members", headers=admin, json={"username": f"gv-u-{sfx}", "role": "member"})
+
+            # publish restricted resource
+            await c.put(
+                f"/v1/resources/Agent/{owner}/core-api",
+                headers=admin,
+                json={"spec": {"image": "reg.local/core:1.0"}, "visibility": "restricted", "tag": "v1"},
+            )
+            # subscribe → pending → owner approves
+            r = await c.post(
+                f"/v1/teams/{sub}/subscriptions",
+                headers=admin,
+                json={"kind": "Agent", "namespace": owner, "name": "core-api"},
+            )
+            sub_id = r.json()["id"]
+            r = await c.post(f"/v1/subscriptions/{sub_id}/approve", headers=admin)
+            assert r.json()["status"] == "active"
+
+            # subscriber reads OK
+            r = await c.post(
+                "/v1/auth/login", json={"username": f"gv-u-{sfx}", "password": "password-123"}
+            )
+            member = {"Authorization": f"Bearer {r.json()['access_token']}"}
+            r = await c.get(f"/v1/resources/Agent/{owner}/core-api", headers=member)
+            assert r.status_code == 200
+
+            # OWNER team admin revokes the grant (not the subscriber)
+            r = await c.delete(f"/v1/subscriptions/{sub_id}", headers=admin)
+            assert r.status_code == 200, r.text
+
+            # subscriber loses access immediately
+            r = await c.get(f"/v1/resources/Agent/{owner}/core-api", headers=member)
+            assert r.status_code == 403, r.text
+
+    asyncio.run(inner())

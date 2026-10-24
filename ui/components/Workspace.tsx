@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  BookOpen, Bot, Boxes, FileText, Home, Link2, LogOut, Moon, Plug, Search, Server, Settings as SettingsIcon, Zap,
+  BookOpen, Bot, Boxes, FileText, Home, Link2, LogOut, Moon, Plug, Search, Server, Settings as SettingsIcon, ShieldCheck, Zap,
 } from "lucide-react";
 import { api, getServer } from "../lib/api";
 import { setLocale } from "../lib/i18n";
 import { toggleTheme } from "../lib/theme";
+import Grants from "./Grants";
 import Overview from "./Overview";
 import ProjectsInline from "./ProjectsInline";
 import ResourceTab from "./ResourceTab";
@@ -22,6 +23,7 @@ type View =
   | { tab: "Skills" }
   | { tab: "Prompts" }
   | { tab: "subscriptions" }
+  | { tab: "grants" }
   | { tab: "settings" };
 
 const RESOURCE_TABS: {
@@ -149,6 +151,12 @@ export default function Workspace({
           <Link2 size={15} /> {t("nav.subscriptions")}
         </button>
         <button
+          className={`nav-item ${view.tab === "grants" ? "active" : ""}`}
+          onClick={() => setView({ tab: "grants" })}
+        >
+          <ShieldCheck size={15} /> {t("nav.grants")}
+        </button>
+        <button
           className={`nav-item ${view.tab === "settings" ? "active" : ""}`}
           onClick={() => setView({ tab: "settings" })}
         >
@@ -255,6 +263,8 @@ export default function Workspace({
             ? t("overview.nav")
             : view.tab === "subscriptions"
               ? t("subs.mine")
+              : view.tab === "grants"
+                ? t("nav.grants")
               : view.tab === "settings"
                 ? t("nav.settings")
                 : RESOURCE_TABS.find((rt) => rt.id === view.tab)?.kindKey
@@ -282,6 +292,8 @@ export default function Workspace({
           <ResourceTab kind={kindOf} namespace={project} />
         ) : view.tab === "subscriptions" ? (
           <Subscriptions project={project} />
+        ) : view.tab === "grants" ? (
+          <Grants project={project} />
         ) : (
           <Settings project={project} />
         )}

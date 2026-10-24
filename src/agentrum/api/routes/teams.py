@@ -225,10 +225,12 @@ async def list_consumers(
     rows = await notification_service.list_consumers(session, team_name)
     return [
         {
+            "id": str(sub.id),
             "subscriber_team": subscriber,
             "kind": sub.kind,
             "namespace": sub.namespace,
             "name": sub.name,
+            "status": sub.status,
             "since": sub.created_at.isoformat(),
         }
         for subscriber, sub in rows
