@@ -31,5 +31,9 @@ ui/out/
 .DS_Store
 .docs-build/
 
+# Scratch / tooling output (logo proposals etc.)
+outputs/
+.workbuddy/
+
 # Personal scaffolding samples (never commit)
 my-test-skill/
