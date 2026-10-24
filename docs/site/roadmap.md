@@ -2,8 +2,8 @@
 
 The living roadmap with decision records lives in the repository:
 
-- [docs/ROADMAP.md](https://github.com/agentrum/agentrum/blob/main/docs/ROADMAP.md) — phases, status and known trade-offs
-- [docs/RESEARCH-resource-model.md](https://github.com/agentrum/agentrum/blob/main/docs/RESEARCH-resource-model.md) — resource model completeness study vs upstream
+- [docs/ROADMAP.md](https://github.com/OYBYforerver/agentrum/blob/main/docs/ROADMAP.md) — phases, status and known trade-offs
+- [docs/RESEARCH-resource-model.md](https://github.com/OYBYforerver/agentrum/blob/main/docs/RESEARCH-resource-model.md) — resource model completeness study vs upstream
 
 Phases:
 

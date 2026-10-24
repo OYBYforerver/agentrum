@@ -4,8 +4,8 @@ replicaCount: 2
 image:
   # Must match what .github/workflows/release.yml actually pushes,
   # i.e. ghcr.io/<github-owner>/<github-repo> for the repository hosting
-  # this chart (see scripts/first-push.sh: github.com/oyby/agentrum).
-  repository: ghcr.io/oyby/agentrum
+  # this chart (see scripts/first-push.sh: github.com/OYBYforerver/agentrum).
+  repository: ghcr.io/oybyforerver/agentrum
   tag: ""  # defaults to chart appVersion
   pullPolicy: IfNotPresent
 

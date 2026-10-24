@@ -1,6 +1,6 @@
 site_name: Agentrum
 site_description: Multi-tenant registry for AI agents, MCP servers, skills and prompts
-repo_url: https://github.com/agentrum/agentrum
+repo_url: https://github.com/OYBYforerver/agentrum
 
 docs_dir: docs/site
 site_dir: .docs-build
