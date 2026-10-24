@@ -15,7 +15,19 @@
     "password": "密码",
     "submit": "登录",
     "orSso": "SSO 登录(待配置)",
-    "error": "登录失败:{{detail}}"
+    "error": "登录失败:{{detail}}",
+    "heroTitle": "让每个团队的 AI 资产",
+    "heroAccent": "发布 · 订阅 · 部署",
+    "heroSub": "一个注册中心管住 Agent、MCP Server、Skill 与 Prompt 的可信目录与交付。",
+    "f1": "项目制多租户,资源边界清晰",
+    "f2": "跨项目订阅,变更实时送达",
+    "f3": "AK/SK 凭据 + 审计,企业级管控",
+    "f4": "原生 Kubernetes 一键部署",
+    "mockRes": "资源",
+    "mockPub": "本周发布",
+    "mockSub": "订阅方",
+    "heroFoot": "控制面而非数据面 —— 已部署负载独立运行,注册中心永不阻塞线上业务。",
+    "ack": "基于开源项目"
   },
   "nav": {
     "catalog": "目录",
