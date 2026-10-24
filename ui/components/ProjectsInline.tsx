@@ -35,8 +35,8 @@ export default function ProjectsInline({
 
   return (
     <div>
-      <h2 className="page">{t("projects.heading")}</h2>
       {error && <p className="error">{error}</p>}
+      <p className="muted" style={{ marginTop: -8 }}>{t("projects.pickHint")}</p>
       <div className="proj-grid">
         {visible.map((tm) => (
           <div

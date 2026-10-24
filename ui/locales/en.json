@@ -47,7 +47,8 @@
     "displayName": "Display name",
     "empty": "No projects yet — ask a platform admin to provision one.",
     "switcher": "Switch project",
-    "current": "current"
+    "current": "current",
+    "pickHint": "Click a card to enter the project"
   },
   "resources": {
     "publish": "Publish",

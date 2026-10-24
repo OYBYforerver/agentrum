@@ -186,8 +186,12 @@ export default function Workspace({
             >
               {t("nav.myProjects")}
             </span>
-            <span className="muted"> / </span>
-            <span className="crumb-active">{project}</span>
+            {view.tab !== "projects" && (
+              <>
+                <span className="muted"> / </span>
+                <span className="crumb-active">{project}</span>
+              </>
+            )}
           </div>
           <div className="searchbox" ref={searchRef}>
             <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "var(--muted)" }} />
@@ -245,6 +249,7 @@ export default function Workspace({
             )}
           </div>
         </div>
+        {view.tab !== "projects" && (
         <h2 className="page">
           {view.tab === "overview"
             ? t("overview.nav")
@@ -254,15 +259,14 @@ export default function Workspace({
                 ? t("nav.settings")
                 : RESOURCE_TABS.find((rt) => rt.id === view.tab)?.kindKey
                   ? t(`nav.kinds.${RESOURCE_TABS.find((rt) => rt.id === view.tab)?.kindKey}`)
-                  : view.tab === "projects"
-                    ? t("nav.myProjects")
-                    : String(view.tab)}
+                  : String(view.tab)}
           {kindOf && (
             <span className="muted" style={{ fontSize: 13, marginLeft: 10, fontWeight: 400 }}>
               {kindOf}
             </span>
           )}
         </h2>
+        )}
         {view.tab === "projects" ? (
           <ProjectsInline
             projects={allProjects}

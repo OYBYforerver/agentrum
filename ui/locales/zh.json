@@ -47,7 +47,8 @@
     "displayName": "项目名称",
     "empty": "暂无项目,请联系平台管理员开通。",
     "switcher": "切换项目",
-    "current": "当前"
+    "current": "当前",
+    "pickHint": "点击卡片进入对应项目"
   },
   "resources": {
     "publish": "发布",
