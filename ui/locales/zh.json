@@ -219,7 +219,7 @@
     "pending": "订阅申请(待我审批)",
     "active": "已授权(谁在订阅我的资源)",
     "activeHint": "收回授权后,对方立即失去对受限资源的访问",
-    "since": "自 {time}",
+    "since": "自 {{time}}",
     "revoke": "收回",
     "empty": "还没有对外授权",
     "confirmRevoke": "确认收回该授权?订阅方将立即失去对受限资源的访问"

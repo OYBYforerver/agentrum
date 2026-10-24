@@ -219,7 +219,7 @@
     "pending": "Subscription requests (awaiting my approval)",
     "active": "Granted (who subscribes to my resources)",
     "activeHint": "Revoking a grant immediately removes access to restricted resources",
-    "since": "since {time}",
+    "since": "since {{time}}",
     "revoke": "Revoke",
     "empty": "No grants yet",
     "confirmRevoke": "Revoke this grant? The subscriber immediately loses access to restricted resources"
