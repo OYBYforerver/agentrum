@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../lib/api";
+import { api, getServer } from "../lib/api";
 import { setLocale } from "../lib/i18n";
 import { toggleTheme } from "../lib/theme";
 import Overview from "./Overview";
@@ -108,6 +108,17 @@ export default function Workspace({
         </button>
         <div className="spacer" />
         <div className="userbox">
+          <a
+            className="nav-item"
+            href={`${getServer()}/handbook/`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            📖 {t("nav.docs")}
+          </a>
+          <a className="nav-item" href={`${getServer()}/docs`} target="_blank" rel="noreferrer">
+            🔌 {t("nav.apiDocs")}
+          </a>
           <select
             value={(i18n.language || "zh").startsWith("zh") ? "zh" : "en"}
             onChange={(e) => setLocale(e.target.value as "zh" | "en")}

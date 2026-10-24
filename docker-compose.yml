@@ -20,6 +20,7 @@ services:
     environment:
       ARK_DATABASE_URL: postgresql+asyncpg://agentrum:agentrum@postgres:5432/agentrum
       ARK_SECRET_KEY: ${ARK_SECRET_KEY:-dev-insecure-change-me}
+      ARK_DOCS_DIR: /app/handbook
     ports:
       - "12122:8080"
     depends_on:

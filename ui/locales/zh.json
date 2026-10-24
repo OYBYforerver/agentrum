@@ -36,7 +36,9 @@
       "skills": "Skill",
       "prompts": "Prompt"
     },
-    "myProjects": "我的项目"
+    "myProjects": "我的项目",
+    "docs": "接入文档",
+    "apiDocs": "API 文档"
   },
   "projects": {
     "heading": "我的项目",

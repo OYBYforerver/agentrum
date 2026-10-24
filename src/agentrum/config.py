@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     notification_retention_days: int = 30
     skill_drift_interval_seconds: int = 300  # git-sourced skill upstream check (0 disables)
 
+    # Bundled handbook (built mkdocs site); mounted at /handbook when set
+    docs_dir: str | None = None
+
     # OpenTelemetry tracing (OTLP HTTP exporter), disabled by default
     otel_enabled: bool = False
     otel_endpoint: str = "http://localhost:4318/v1/traces"

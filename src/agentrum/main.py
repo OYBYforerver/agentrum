@@ -2,6 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -106,6 +107,13 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router)
     install_error_handlers(app)
+
+    # Bundled onboarding handbook (built mkdocs site) — mount BEFORE the
+    # catch-all MCP mount below, or /handbook/* would fall into it.
+    if settings.docs_dir and Path(settings.docs_dir).is_dir():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/handbook", StaticFiles(directory=settings.docs_dir, html=True), name="handbook")
 
     # Registry-as-MCP-server: IDE-facing read-only tools at /mcp
     # (mounted at root: the sub-app itself serves POST /mcp; its session

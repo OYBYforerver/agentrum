@@ -36,7 +36,9 @@
       "skills": "Skill",
       "prompts": "Prompt"
     },
-    "myProjects": "My projects"
+    "myProjects": "My projects",
+    "docs": "Documentation",
+    "apiDocs": "API docs"
   },
   "projects": {
     "heading": "My projects",
