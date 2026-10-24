@@ -220,3 +220,23 @@ pre.sk { background: var(--accent-soft); padding: 12px; border-radius: 8px; word
 .login-card label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 4px; }
 .login-ack a { text-decoration: none; }
 @media (max-width: 920px) { .login-brand { display: none; } }
+
+/* 富项目卡片 */
+.pcard { cursor: pointer; }
+.pcard:hover { border-color: var(--accent); }
+.pcard:hover .pcard-arrow { color: var(--accent) !important; transform: translateX(3px); }
+.pcard-arrow { transition: all 0.18s ease; }
+.pcard-avatar {
+  width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 18px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+}
+.pcard-stats {
+  display: flex; gap: 14px; margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.pcard-stats span {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--muted);
+}

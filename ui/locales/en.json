@@ -61,7 +61,10 @@
     "empty": "No projects yet — ask a platform admin to provision one.",
     "switcher": "Switch project",
     "current": "current",
-    "pickHint": "Click a card to enter the project"
+    "pickHint": "Click a card to enter the project",
+    "res": "{{count}} resources",
+    "subs": "{{count}} subscribers",
+    "pub": "{{count}} published (7d)"
   },
   "resources": {
     "publish": "Publish",
