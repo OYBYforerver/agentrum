@@ -1,0 +1,39 @@
+# Keep the build context small and the image clean.
+# NOTE: docs/site and mkdocs.yml must stay (the docs build stage copies them).
+
+# VCS / CI
+.git
+.gitignore
+.github
+.workbuddy
+.zcode
+
+# Python
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+outputs
+
+# Node / UI (rebuilt inside the image; host artifacts never ship)
+ui/node_modules
+ui/.next
+ui/out
+ui/tsconfig.tsbuildinfo
+
+# Docs build artifacts
+.docs-build
+
+# Local scaffolding / personal samples
+my-test-skill
+
+# Docker / charts are not needed inside the image
+Dockerfile
+.dockerignore
+docker-compose.yml
+charts

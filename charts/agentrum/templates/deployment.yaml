@@ -25,7 +25,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.database.existingSecret | default (include "agentrum.fullname" .) }}
-                  key: AGENT_REGISTRY_DATABASE_URL
+                  key: ARK_DATABASE_URL
       containers:
         - name: server
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -50,7 +50,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.database.existingSecret | default (include "agentrum.fullname" .) }}
-                  key: AGENT_REGISTRY_DATABASE_URL
+                  key: ARK_DATABASE_URL
             - name: ARK_SECRET_KEY
               valueFrom:
                 secretKeyRef:
@@ -63,7 +63,13 @@ spec:
                 secretKeyRef:
                   name: {{ include "agentrum.fullname" . }}
                   key: ARK_BOOTSTRAP_ADMIN_PASSWORD
-            {{- if .Values.secrets.encryptionKey }}
+            {{- if .Values.secrets.existingSecret }}
+            - name: ARK_SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: ARK_SECRET_ENCRYPTION_KEY
+            {{- else if .Values.secrets.encryptionKey }}
             - name: ARK_SECRET_ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:

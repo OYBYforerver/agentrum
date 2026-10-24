@@ -4,5 +4,5 @@ description: Multi-tenant registry for AI agents, MCP servers, skills and prompt
 type: application
 version: 0.0.1
 appVersion: "0.0.1"
-home: https://github.com/agentrum/agentrum
+home: https://github.com/oyby/agentrum
 license: Apache-2.0

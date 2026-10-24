@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
 
+# One release run per tag; a re-pushed tag supersedes the old run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
   packages: write
@@ -14,8 +19,45 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agentrum
+          POSTGRES_PASSWORD: agentrum
+          POSTGRES_DB: agentrum_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U agentrum"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      ARK_DATABASE_URL: postgresql+asyncpg://agentrum:agentrum@localhost:5433/agentrum_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Unit tests
+        run: uv run pytest -q
+      - name: Migrate test database
+        run: uv run alembic upgrade head
+      - name: Integration tests
+        run: uv run pytest tests/integration -q
+        env:
+          ARK_INTEGRATION: "1"
+
   build-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -47,13 +89,16 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build-push
     steps:
       - uses: actions/checkout@v4
+      - name: Install Helm (pinned)
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
       - name: Package Helm chart
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-          helm package charts/agentrum
+        run: helm package charts/agentrum
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true

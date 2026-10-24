@@ -21,6 +21,10 @@ services:
       ARK_DATABASE_URL: postgresql+asyncpg://agentrum:agentrum@postgres:5432/agentrum
       ARK_SECRET_KEY: ${ARK_SECRET_KEY:-dev-insecure-change-me}
       ARK_DOCS_DIR: /app/handbook
+      # Local development exemption ONLY: permits the default secret key /
+      # bootstrap admin123 credentials. The backend refuses to start with
+      # insecure defaults unless this is set — never enable it in production.
+      ARK_ALLOW_INSECURE: "true"
     ports:
       - "12122:8080"
     depends_on:

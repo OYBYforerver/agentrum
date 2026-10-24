@@ -2,7 +2,10 @@
 replicaCount: 2
 
 image:
-  repository: ghcr.io/agentrum/agentrum
+  # Must match what .github/workflows/release.yml actually pushes,
+  # i.e. ghcr.io/<github-owner>/<github-repo> for the repository hosting
+  # this chart (see scripts/first-push.sh: github.com/oyby/agentrum).
+  repository: ghcr.io/oyby/agentrum
   tag: ""  # defaults to chart appVersion
   pullPolicy: IfNotPresent
 
@@ -22,8 +25,8 @@ database:
   # Use an external, HA PostgreSQL in production (cloud RDS / Patroni).
   # "bundled" deploys a single-pod Postgres for evaluation only.
   type: external
-  url: ""  # postgresql+asyncpg://user:pass@host:5432/agentrum
-  existingSecret: ""  # alternative: secret with key AGENT_REGISTRY_DATABASE_URL
+  url: ""  # REQUIRED unless existingSecret is set: postgresql+asyncpg://user:pass@host:5432/agentrum
+  existingSecret: ""  # alternative: secret with key ARK_DATABASE_URL
 
 auth:
   secretKey: ""  # JWT signing key; REQUIRED. Create via --set or existing secret.

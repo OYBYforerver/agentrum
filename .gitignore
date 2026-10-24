@@ -19,6 +19,7 @@ node_modules/
 ui/.next/
 ui/out/
 .next/
+*.tsbuildinfo
 
 # Environment
 .env
@@ -29,3 +30,6 @@ ui/out/
 .vscode/
 .DS_Store
 .docs-build/
+
+# Personal scaffolding samples (never commit)
+my-test-skill/
