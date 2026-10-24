@@ -7,10 +7,17 @@
   </defs>
   <g transform="translate(16,16) scale(0.25)">
     <rect width="512" height="512" rx="112" fill="url(#bg2)"/>
-    <path d="M132 382 L132 252 A124 124 0 0 1 380 252 L380 382"
-          fill="none" stroke="#fff" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
-    <polygon points="256,242 299.3,267 299.3,317 256,342 212.7,317 212.7,267" fill="#fff"/>
-    <circle cx="256" cy="292" r="14" fill="#0EA5E9"/>
+    <g fill="none" stroke="#fff" stroke-width="48" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M66 376 L88 246 A112 112 0 0 1 312 246 L334 376"/>
+      <path d="M80 314 L320 314" stroke-linecap="butt"/>
+    </g>
+    <polygon points="200,178 239.8,201 239.8,247 200,270 160.2,247 160.2,201" fill="#fff"/>
+    <circle cx="200" cy="224" r="13" fill="#0EA5E9"/>
+    <g fill="none" stroke="#fff" stroke-linecap="round">
+      <path d="M429 136 L429 376" stroke-width="48"/>
+      <path d="M412 134 L446 134" stroke-width="44"/>
+      <path d="M412 378 L446 378" stroke-width="44"/>
+    </g>
   </g>
   <text x="176" y="92" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
         font-size="62" font-weight="700" fill="#0F172A" letter-spacing="-1">Agentrum</text>
