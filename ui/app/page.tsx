@@ -34,7 +34,6 @@ export default function Home() {
     <Workspace
       project={project}
       onSwitch={setProject}
-      onBack={() => setProject(null)}
       onExit={() => {
         setProject(null);
         setAuthed(false);

@@ -4,6 +4,15 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
 
+interface ActivityRow {
+  action: string;
+  actor: string | null;
+  kind: string | null;
+  namespace: string | null;
+  name: string | null;
+  occurred_at: string;
+}
+
 interface Stats {
   resources_by_kind: Record<string, number>;
   total_resources: number;
@@ -23,12 +32,16 @@ export default function Overview({
 }) {
   const { t } = useTranslation();
   const [stats, setStats] = useState<Stats | null>(null);
+  const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
     void api<Stats>(`/v1/teams/${project}/stats`)
       .then(setStats)
       .catch((e) => setError(String(e).replace("Error: ", "")));
+    void api<ActivityRow[]>(`/v1/teams/${project}/activity`)
+      .then(setActivity)
+      .catch(() => {});
   }, [project]);
 
   if (error) return <p className="error">{error}</p>;
@@ -54,6 +67,27 @@ export default function Overview({
           <div className="label">{t("overview.pending")}</div>
         </div>
       </div>
+
+      {activity.length > 0 && (
+        <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: 20 }}>
+          <table>
+            <tbody>
+              {activity.slice(0, 6).map((a, i) => (
+                <tr key={i}>
+                  <td style={{ width: 26 }}>
+                    <span className={`dot-ev ${a.action.includes("delete") || a.action.includes("reject") ? "bad" : "ok"}`} />
+                  </td>
+                  <td>
+                    <strong>{a.actor || "-"}</strong> {t(`activity.${a.action}`, a.action)}
+                    {a.name ? <strong> {a.kind} {a.name}</strong> : ""}
+                    <span className="muted" style={{ fontSize: 12 }}> · {a.occurred_at.slice(5, 16).replace("T", " ")}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="proj-grid">
         {KIND_ORDER.map((k) => (

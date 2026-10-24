@@ -1,6 +1,11 @@
+from typing import Any, Literal
+
 from fastapi import APIRouter, Depends, Request, Response
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agentrum import audit as audit_mod
+from agentrum import errors as err_mod
 from agentrum.auth.deps import get_current_user
 from agentrum.db import models
 from agentrum.db.engine import get_session
@@ -115,6 +120,54 @@ async def apply_resource(
             created_at=rv.created_at,
         ),
     )
+
+
+class ResourcePatchIn(BaseModel):
+    description: str | None = None
+    labels: dict[str, str] | None = None
+    visibility: Literal["internal", "restricted", "private"] | None = None
+    catalog: dict[str, Any] | None = None
+
+
+@router.patch("/{kind}/{namespace}/{name}", response_model=ResourceOut)
+async def patch_resource(
+    kind: str,
+    namespace: str,
+    name: str,
+    body: ResourcePatchIn,
+    request: Request,
+    user: models.User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ResourceOut:
+    """Edit mutable metadata (description/labels/visibility/catalog) WITHOUT
+    creating a version — spec and tags stay immutable."""
+
+    from agentrum.schemas.specs import validate_catalog
+
+    kind_n = resource_service.normalize_kind(kind)
+    resource = await resource_service._get_resource(session, kind_n, namespace, name)
+    if resource is None:
+        raise err_mod.NotFoundError(f"{kind}/{namespace}/{name} not found")
+    await resource_service._require_publish_role(session, user, namespace)
+    if body.visibility is not None:
+        resource.visibility = (
+            models.VISIBILITY_PRIVATE if kind_n == "Prompt" else body.visibility
+        )
+    if body.description is not None:
+        resource.description = body.description
+    if body.labels is not None:
+        resource.labels = body.labels
+    if body.catalog is not None:
+        resource.catalog = validate_catalog(body.catalog)
+    await audit_mod.record(
+        session, actor=user, action="resource.update", kind=kind_n,
+        namespace=namespace, name=name,
+        source_ip=request.client.host if request.client else None,
+    )
+    await session.commit()
+    await session.refresh(resource)
+    items = await _serialize(session, [resource], {})
+    return items[0]
 
 
 @router.get("", response_model=ResourceListOut)

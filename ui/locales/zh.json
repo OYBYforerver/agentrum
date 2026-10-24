@@ -46,7 +46,8 @@
     "name": "项目标识(小写字母/数字/-)",
     "displayName": "项目名称",
     "empty": "暂无项目,请联系平台管理员开通。",
-    "switcher": "切换项目"
+    "switcher": "切换项目",
+    "current": "当前"
   },
   "resources": {
     "publish": "发布",
@@ -59,7 +60,14 @@
       "visibility": "可见性",
       "tag": "最新版本",
       "updated": "更新时间"
-    }
+    },
+    "newVersion": "发布新版本",
+    "editMeta": "编辑元数据",
+    "prefillHint": "已预填上一版内容——修改后将以新版本发布(spec 与 tag 不可变)",
+    "editMetaHint": "仅修改元数据(描述/可见性/目录信息),不产生新版本",
+    "varCount": "{count} 个变量",
+    "keys": "{count} 个键",
+    "confirmDeleteImpact": "{{name}} 正被 {{count}} 个团队订阅,确认删除?(软删除,可重新发布恢复)"
   },
   "visibility": {
     "internal": "公司内部",
@@ -172,6 +180,37 @@
     "docs": "文档",
     "status": "运行状态",
     "secretKeys": "Secret 键",
-    "spec": "当前版本 Spec"
+    "spec": "当前版本 Spec",
+    "copy": "复制",
+    "copied": "已复制",
+    "endpoint": "服务端点",
+    "cursorConfig": "Cursor / Claude Code 接入配置",
+    "pullCommand": "镜像拉取命令",
+    "envVars": "环境变量",
+    "clone": "复制 clone 命令",
+    "gitSource": "Git 来源",
+    "drift": "上游漂移",
+    "previewTitle": "变量试填 → 实时预览",
+    "copyTemplate": "复制模板"
+  },
+  "search": {
+    "placeholder": "搜索项目 / 资源…"
+  },
+  "activity": {
+    "resource.publish": "发布了",
+    "resource.delete": "删除了",
+    "resource.update": "更新了元数据",
+    "subscription.request": "申请订阅",
+    "subscription.approve": "批准了订阅",
+    "subscription.reject": "拒绝了订阅",
+    "subscription.revoke": "退订了",
+    "team.create": "创建了项目",
+    "team.member.add": "添加了成员",
+    "team.member.remove": "移除了成员",
+    "user.change_password": "修改了密码",
+    "access_key.create": "创建了 AK/SK",
+    "access_key.revoke": "吊销了 AK/SK",
+    "secret.set": "更新了 Secret",
+    "user.oidc_create": "通过 SSO 加入"
   }
 }

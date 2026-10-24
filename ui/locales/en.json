@@ -46,7 +46,8 @@
     "name": "Project ID (lowercase/digits/-)",
     "displayName": "Display name",
     "empty": "No projects yet — ask a platform admin to provision one.",
-    "switcher": "Switch project"
+    "switcher": "Switch project",
+    "current": "current"
   },
   "resources": {
     "publish": "Publish",
@@ -59,7 +60,14 @@
       "visibility": "Visibility",
       "tag": "Latest tag",
       "updated": "Updated"
-    }
+    },
+    "newVersion": "New version",
+    "editMeta": "Edit metadata",
+    "prefillHint": "Prefilled from the latest version — your changes publish as a new version (spec and tags are immutable)",
+    "editMetaHint": "Edits metadata only (description/visibility/catalog) — no new version",
+    "varCount": "{count} variables",
+    "keys": "{count} keys",
+    "confirmDeleteImpact": "{{name}} is used by {{count}} team(s). Delete? (soft delete — re-publishing restores it)"
   },
   "visibility": {
     "internal": "internal",
@@ -172,6 +180,37 @@
     "docs": "Docs",
     "status": "Runtime status",
     "secretKeys": "Secret keys",
-    "spec": "Current spec"
+    "spec": "Current spec",
+    "copy": "Copy",
+    "copied": "Copied",
+    "endpoint": "Endpoint",
+    "cursorConfig": "Cursor / Claude Code config",
+    "pullCommand": "Pull command",
+    "envVars": "Env vars",
+    "clone": "Copy clone command",
+    "gitSource": "Git source",
+    "drift": "Upstream drift",
+    "previewTitle": "Fill variables → live preview",
+    "copyTemplate": "Copy template"
+  },
+  "search": {
+    "placeholder": "Search projects / resources…"
+  },
+  "activity": {
+    "resource.publish": "published",
+    "resource.delete": "deleted",
+    "resource.update": "updated metadata of",
+    "subscription.request": "requested a subscription to",
+    "subscription.approve": "approved a subscription",
+    "subscription.reject": "rejected a subscription",
+    "subscription.revoke": "revoked a subscription",
+    "team.create": "created project",
+    "team.member.add": "added member to",
+    "team.member.remove": "removed member from",
+    "user.change_password": "changed password",
+    "access_key.create": "created AK/SK",
+    "access_key.revoke": "revoked AK/SK",
+    "secret.set": "updated Secret",
+    "user.oidc_create": "joined via SSO"
   }
 }

@@ -170,6 +170,46 @@ async def team_stats(
     }
 
 
+@router.get("/{team_name}/activity", response_model=list[dict])
+async def team_activity(
+    team_name: str,
+    limit: int = 10,
+    user: models.User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Recent events for the overview page (publishes, deletes, membership)."""
+    from sqlalchemy import or_ as sa_or
+
+    team = await team_service.get_team(session, team_name)
+    await team_service.require_member(session, user, team)
+    limit = max(1, min(limit, 30))
+    rows = (
+        await session.execute(
+            select(models.AuditLog)
+            .where(
+                sa_or(
+                    models.AuditLog.namespace == team.name,
+                    models.AuditLog.detail["team"].astext == team.name,
+                )
+            )
+            .order_by(models.AuditLog.occurred_at.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+    names = await team_service.usernames(session, [r.actor_user_id for r in rows])
+    return [
+        {
+            "action": r.action,
+            "actor": names.get(r.actor_user_id),
+            "kind": r.kind,
+            "namespace": r.namespace,
+            "name": r.name,
+            "occurred_at": r.occurred_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
 @router.get("/{team_name}/consumers", response_model=list[dict])
 async def list_consumers(
     team_name: str,
