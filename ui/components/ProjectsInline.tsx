@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Boxes, Plus, Rocket, Search, Users } from "lucide-react";
-import { api } from "../lib/api";
+import { api, errMsg } from "../lib/api";
 
 interface TeamRow {
   name: string;
@@ -57,8 +57,9 @@ export default function ProjectsInline({
     try {
       const teams = await api<TeamRow[]>("/v1/teams");
       setRows(teams);
-      setMe(await api<{ is_platform_admin: boolean }>("/v1/auth/me"));
-      if (me?.is_platform_admin || me === null) {
+      const meData = await api<{ is_platform_admin: boolean }>("/v1/auth/me");
+      setMe(meData);
+      if (meData?.is_platform_admin) {
         void api<{ username: string; display_name: string | null }[]>("/v1/users")
           .then(setUsers)
           .catch(() => {});
@@ -78,7 +79,7 @@ export default function ProjectsInline({
         }
       }
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }
 
@@ -109,7 +110,7 @@ export default function ProjectsInline({
       setOwnerQuery("");
       void load();
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }
 
@@ -208,7 +209,7 @@ export default function ProjectsInline({
                     {users
                       .filter(
                         (u) =>
-                          u.username.includes(ownerQuery.toLowerCase()) ||
+                          u.username.toLowerCase().includes(ownerQuery.toLowerCase()) ||
                           (u.display_name || "").toLowerCase().includes(ownerQuery.toLowerCase())
                       )
                       .slice(0, 8)

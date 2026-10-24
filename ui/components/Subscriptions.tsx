@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../lib/api";
+import { api, errMsg, withBusy } from "../lib/api";
 
 interface SubRow {
   id: string;
@@ -41,16 +41,15 @@ function SearchSelect({
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const filtered = useMemo(
-    () =>
-      options.filter(
-        (o) =>
-          o.namespace.includes(query.toLowerCase()) ||
-          o.name.includes(query.toLowerCase()) ||
-          (o.description || "").toLowerCase().includes(query.toLowerCase())
-      ),
-    [options, query]
-  );
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return options.filter(
+      (o) =>
+        o.namespace.toLowerCase().includes(q) ||
+        o.name.toLowerCase().includes(q) ||
+        (o.description || "").toLowerCase().includes(q)
+    );
+  }, [options, query]);
 
   return (
     <div className="combo">
@@ -106,6 +105,7 @@ export default function Subscriptions({ project }: { project: string }) {
   const [pool, setPool] = useState<PoolRow[]>([]);
   const [nsVal, setNsVal] = useState("");
   const [nameVal, setNameVal] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -113,7 +113,7 @@ export default function Subscriptions({ project }: { project: string }) {
       setMine(mineData.items);
 
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }, [project]);
 
@@ -127,7 +127,7 @@ export default function Subscriptions({ project }: { project: string }) {
     if (!showNew) return;
     void api<{ items: PoolRow[] }>(`/v1/resources?kind=${kindSel}&limit=200`)
       .then((d) => setPool(d.items))
-      .catch((e) => setError(String(e).replace("Error: ", "")));
+      .catch((e) => setError(errMsg(e)));
   }, [showNew, kindSel]);
 
   const namespaces = useMemo(
@@ -152,13 +152,16 @@ export default function Subscriptions({ project }: { project: string }) {
       setNameVal("");
       void load();
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }
 
-  async function revoke(id: string) {
-    await api(`/v1/subscriptions/${id}`, { method: "DELETE" });
-    void load();
+  function revoke(s: SubRow) {
+    if (!confirm(t("subs.confirmRevoke", { target: `${s.kind} ${s.namespace}/${s.name}` }))) return;
+    void withBusy(setBusy, async () => {
+      await api(`/v1/subscriptions/${s.id}`, { method: "DELETE" });
+      void load();
+    }, (e) => setError(errMsg(e)));
   }
 
   return (
@@ -194,7 +197,7 @@ export default function Subscriptions({ project }: { project: string }) {
                   </td>
                   <td style={{ width: 90, textAlign: "right" }}>
                     {s.status !== "revoked" && (
-                      <button className="ghost" onClick={() => void revoke(s.id)}>
+                      <button className="ghost" disabled={busy} onClick={() => revoke(s)}>
                         {t("subs.revoke")}
                       </button>
                     )}

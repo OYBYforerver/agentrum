@@ -4,7 +4,7 @@ import "../lib/i18n";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getToken } from "../lib/api";
-import { applyTheme, getTheme } from "../lib/theme";
+import { applyTheme, getTheme, toggleTheme } from "../lib/theme";
 import { LogOut, Moon } from "lucide-react";
 import Login from "../components/Login";
 import ProjectsInline from "../components/ProjectsInline";
@@ -18,11 +18,20 @@ export default function Home() {
 
   useEffect(() => {
     applyTheme(getTheme());
+    // OIDC callback: the backend redirects to {ui_origin}/#token=<JWT>&login=<username>.
+    // The fragment never reaches the server; legacy ?token=/?login= query params still work.
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const url = new URL(window.location.href);
-    const urlToken = url.searchParams.get("token");
+    const urlToken = hash.get("token") || url.searchParams.get("token");
+    const urlLogin = hash.get("login") || url.searchParams.get("login");
     if (urlToken) {
       localStorage.setItem("agentrum-token", urlToken);
-      window.history.replaceState({}, "", "/");
+      if (urlLogin) localStorage.setItem("agentrum-login", urlLogin);
+      // Strip the credential from the address bar but keep unrelated params (e.g. ?server=).
+      url.hash = "";
+      url.searchParams.delete("token");
+      url.searchParams.delete("login");
+      window.history.replaceState({}, "", url.pathname + url.search);
     }
     if (getToken()) setAuthed(true);
     setReady(true);
@@ -34,13 +43,13 @@ export default function Home() {
     return (
       <main className="content" style={{ margin: "0 auto", minHeight: "100vh" }}>
         <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 0 8px" }}>
-          <span className="dot" style={{ width: 11, height: 11, borderRadius: 4, background: "linear-gradient(135deg,#4f46e5,#06b6d4)", display: "inline-block" }} />
+          <img src="/icon.svg" alt="" width={20} height={20} style={{ borderRadius: 5 }} />
           <strong style={{ fontSize: 16 }}>Agentrum</strong>
           <span style={{ flex: 1 }} />
           <button
             className="ghost icon-btn"
             title={t("nav.theme")}
-            onClick={() => applyTheme(getTheme() === "light" ? "dark" : "light")}
+            onClick={() => toggleTheme()}
           >
             <Moon size={15} />
           </button>

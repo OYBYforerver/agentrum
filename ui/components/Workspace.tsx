@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import {
   BookOpen, Bot, Boxes, FileText, Home, Link2, LogOut, Moon, Plug, Search, Server, Settings as SettingsIcon, ShieldCheck, Zap,
 } from "lucide-react";
-import { api, getServer } from "../lib/api";
+import { api, errMsg, getServer } from "../lib/api";
 import { setLocale } from "../lib/i18n";
 import { toggleTheme } from "../lib/theme";
 import Grants from "./Grants";
@@ -72,7 +72,7 @@ export default function Workspace({
           `/v1/resources?q=${encodeURIComponent(query)}&limit=8`
         );
         setResults({
-          projects: allProjects.filter((p) => p.includes(query.toLowerCase())),
+          projects: allProjects.filter((p) => p.toLowerCase().includes(query.toLowerCase())),
           resources: res.items.map((r) => ({ ...r, ref: `${r.kind}/${r.namespace}/${r.name}` })),
         });
       } catch {
@@ -110,7 +110,7 @@ export default function Workspace({
     <div className="shell">
       <aside className="sidebar">
         <div className="logo">
-          <span className="dot" /> Agentrum
+          <img src="/icon.svg" alt="" width={20} height={20} style={{ borderRadius: 5 }} /> Agentrum
         </div>
         <select value={project} onChange={(e) => onSwitch(e.target.value)} title={t("projects.switcher")}>
           {allProjects.map((p) => (

@@ -12,12 +12,42 @@ export function setToken(token: string) {
 
 export function getServer(): string {
   if (typeof window === "undefined") return "http://localhost:12122";
+  // URL parameter wins over a stale localStorage value (same precedence as ?token=).
   const fromUrl = new URLSearchParams(window.location.search).get("server");
-  return localStorage.getItem(SERVER_KEY) || fromUrl || window.location.origin.replace(":3000", ":12122");
+  return (
+    fromUrl ||
+    localStorage.getItem(SERVER_KEY) ||
+    window.location.origin.replace(":3000", ":12122")
+  );
 }
 
 export function setServer(server: string) {
-  localStorage.setItem(SERVER_KEY, server.replace(/\/$/, ""));
+  const trimmed = server.trim().replace(/\/$/, "");
+  if (!trimmed) return;
+  localStorage.setItem(SERVER_KEY, trimmed);
+}
+
+/** Normalize an unknown error into a human-readable message (no "Error: " prefix). */
+export function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return String(e).replace(/^Error: /, "");
+}
+
+/** Run an async action under a busy flag; errors go to onError (never swallowed silently). */
+export async function withBusy(
+  setBusy: (busy: boolean) => void,
+  fn: () => Promise<void>,
+  onError?: (e: unknown) => void
+) {
+  setBusy(true);
+  try {
+    await fn();
+  } catch (e) {
+    if (onError) onError(e);
+    else throw e;
+  } finally {
+    setBusy(false);
+  }
 }
 
 export async function api<T = unknown>(

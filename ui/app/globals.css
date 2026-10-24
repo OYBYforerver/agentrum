@@ -160,6 +160,27 @@ pre.sk { background: var(--accent-soft); padding: 12px; border-radius: 8px; word
 .dot-ev.ok { background: var(--ok); }
 .dot-ev.bad { background: var(--bad); }
 
+/* 弃用横幅 + 标记弃用小表单 */
+.dep-banner {
+  display: flex; flex-direction: column; gap: 3px;
+  background: rgba(217, 119, 6, 0.1);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+.dep-banner .dep-head { display: flex; align-items: center; gap: 7px; color: var(--warn); font-weight: 600; }
+.dep-banner .dep-line { word-break: break-word; }
+.row-between { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 4px; }
+.row-between label { margin: 0; }
+.dep-form {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 2px 14px 14px;
+  margin-top: 16px;
+}
+
 /* ── 登录页:双栏品牌布局 ─────────────────────────── */
 .login-shell { display: flex; min-height: 100vh; }
 .login-brand {

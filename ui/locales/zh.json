@@ -6,7 +6,8 @@
   "common": {
     "ok": "确定",
     "cancel": "取消",
-    "delete": "删除"
+    "delete": "删除",
+    "working": "处理中…"
   },
   "login": {
     "heading": "登录",
@@ -123,12 +124,14 @@
     "searchName": "输入名称搜索资源…",
     "pickNamespaceFirst": "请先选择目标命名空间",
     "noMatch": "无匹配结果(或当前不可见)",
-    "wholeNamespaceHint": "名称留空 = 订阅整个命名空间(新资源发布时自动收到通知)"
+    "wholeNamespaceHint": "名称留空 = 订阅整个命名空间(新资源发布时自动收到通知)",
+    "confirmRevoke": "确认退订 {{target}}?"
   },
   "settings": {
     "members": "成员管理",
     "username": "用户名",
-    "addMember": "添加成员"
+    "addMember": "添加成员",
+    "confirmRemoveMember": "确认将成员 {{username}} 移出项目?"
   },
   "aksk": {
     "heading": "AK/SK 凭据",
@@ -143,7 +146,8 @@
     "neverUsed": "从未使用",
     "revoked": "已吊销",
     "revoke": "吊销",
-    "empty": "尚无 AK/SK"
+    "empty": "尚无 AK/SK",
+    "confirmRevoke": "确认吊销该 AK/SK?正在使用它的 CLI / CI 将立即失去访问能力"
   },
   "lang": {
     "label": "语言"
@@ -211,7 +215,34 @@
     "gitSource": "Git 来源",
     "drift": "上游漂移",
     "previewTitle": "变量试填 → 实时预览",
-    "copyTemplate": "复制模板"
+    "copyTemplate": "复制模板",
+    "copyFailed": "复制失败"
+  },
+  "deprecation": {
+    "banner": "该资源已标记弃用",
+    "action": "标记弃用…",
+    "undeprecate": "取消弃用",
+    "reason": "原因",
+    "successor": "替代",
+    "byLine": "由 {{name}} 于 {{time}} 标记",
+    "reasonLabel": "原因(可选)",
+    "reasonPlaceholder": "为什么弃用(如:已被 v2 取代)",
+    "successorLabel": "替代资源(可选,格式 ns/name)",
+    "successorPlaceholder": "team-a/my-server-v2",
+    "confirm": "确认弃用"
+  },
+  "connect": {
+    "title": "连接方式",
+    "getCfg": "获取连接配置",
+    "refresh": "重新获取",
+    "copied": "已复制",
+    "claudeCode": "Claude Code",
+    "cursor": "Cursor",
+    "generic": "通用(JSON)",
+    "command": "本地命令(stdio)",
+    "url": "服务地址",
+    "headers": "请求头",
+    "notes": "说明"
   },
   "search": {
     "placeholder": "搜索项目 / 资源…"

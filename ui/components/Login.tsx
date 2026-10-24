@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import {
   Boxes, Link2, LockKeyhole, Rocket, Server, ShieldCheck,
 } from "lucide-react";
-import { api, setServer, setToken } from "../lib/api";
+import { api, errMsg, setServer, setToken } from "../lib/api";
 import { setLocale } from "../lib/i18n";
 
 export default function Login({ onOk }: { onOk: () => void }) {
@@ -28,7 +28,7 @@ export default function Login({ onOk }: { onOk: () => void }) {
       setToken(data.access_token);
       onOk();
     } catch (e) {
-      setError(t("login.error", { detail: String(e).replace("Error: ", "") }));
+      setError(t("login.error", { detail: errMsg(e) }));
     } finally {
       setBusy(false);
     }
@@ -50,7 +50,8 @@ export default function Login({ onOk }: { onOk: () => void }) {
         <div className="brand-grid" />
         <div className="brand-inner">
           <div className="brand-logo">
-            <span className="dot" /> Agentrum
+            <img src="/icon.svg" alt="" width={22} height={22} style={{ borderRadius: 5 }} />
+            Agentrum
           </div>
           <h1 className="brand-title">
             {t("login.heroTitle")}
@@ -92,8 +93,8 @@ export default function Login({ onOk }: { onOk: () => void }) {
       {/* 表单面板 */}
       <section className="login-form-side">
         <div className="login-card">
-          <h1 style={{ margin: 0, fontSize: 24 }}>
-            <span className="dot" style={{ display: "inline-block", width: 11, height: 11, borderRadius: 4, background: "linear-gradient(135deg,#4f46e5,#06b6d4)", marginRight: 8 }} />
+          <h1 style={{ margin: 0, fontSize: 24, display: "flex", alignItems: "center", gap: 8 }}>
+            <img src="/icon.svg" alt="Agentrum" width={26} height={26} style={{ borderRadius: 6 }} />
             Agentrum
           </h1>
           <p style={{ color: "var(--muted)", marginTop: 6, fontSize: 13 }}>{t("login.heading")}</p>

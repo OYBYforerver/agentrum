@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../lib/api";
+import { api, errMsg, withBusy } from "../lib/api";
 
 interface GrantRow {
   id: string;
@@ -19,6 +19,7 @@ export default function Grants({ project }: { project: string }) {
   const [pending, setPending] = useState<GrantRow[]>([]);
   const [granted, setGranted] = useState<GrantRow[]>([]);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -30,7 +31,7 @@ export default function Grants({ project }: { project: string }) {
       const consumers = await api<GrantRow[]>(`/v1/teams/${project}/consumers`);
       setGranted(consumers);
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }, [project]);
 
@@ -38,15 +39,21 @@ export default function Grants({ project }: { project: string }) {
     void load();
   }, [load]);
 
-  async function decide(id: string, approve: boolean) {
-    await api(`/v1/subscriptions/${id}/${approve ? "approve" : "reject"}`, { method: "POST" });
-    void load();
+  function decide(id: string, approve: boolean) {
+    setError("");
+    void withBusy(setBusy, async () => {
+      await api(`/v1/subscriptions/${id}/${approve ? "approve" : "reject"}`, { method: "POST" });
+      void load();
+    }, (e) => setError(errMsg(e)));
   }
 
-  async function revoke(id: string) {
+  function revoke(id: string) {
     if (!confirm(t("grants.confirmRevoke"))) return;
-    await api(`/v1/subscriptions/${id}`, { method: "DELETE" });
-    void load();
+    setError("");
+    void withBusy(setBusy, async () => {
+      await api(`/v1/subscriptions/${id}`, { method: "DELETE" });
+      void load();
+    }, (e) => setError(errMsg(e)));
   }
 
   return (
@@ -69,10 +76,10 @@ export default function Grants({ project }: { project: string }) {
                     </div>
                   </td>
                   <td style={{ width: 180, textAlign: "right" }}>
-                    <button className="primary" onClick={() => void decide(s.id, true)}>
+                    <button className="primary" disabled={busy} onClick={() => decide(s.id, true)}>
                       {t("subs.approve")}
                     </button>{" "}
-                    <button className="danger" onClick={() => void decide(s.id, false)}>
+                    <button className="danger" disabled={busy} onClick={() => decide(s.id, false)}>
                       {t("subs.reject")}
                     </button>
                   </td>
@@ -113,7 +120,7 @@ export default function Grants({ project }: { project: string }) {
                     {t("grants.since", { time: g.since.slice(0, 10) })}
                   </td>
                   <td style={{ width: 110, textAlign: "right" }}>
-                    <button className="danger" onClick={() => void revoke(g.id)}>
+                    <button className="danger" disabled={busy} onClick={() => revoke(g.id)}>
                       {t("grants.revoke")}
                     </button>
                   </td>

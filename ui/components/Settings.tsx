@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../lib/api";
+import { api, errMsg, withBusy } from "../lib/api";
 
 interface MemberRow {
   username: string;
@@ -25,13 +25,14 @@ export default function Settings({ project }: { project: string }) {
   const [keys, setKeys] = useState<AkRow[]>([]);
   const [error, setError] = useState("");
   const [created, setCreated] = useState<{ ak: string; sk: string } | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setMembers(await api<MemberRow[]>(`/v1/teams/${project}/members`));
       setKeys(await api<AkRow[]>(`/v1/teams/${project}/access-keys`));
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }, [project]);
 
@@ -51,13 +52,17 @@ export default function Settings({ project }: { project: string }) {
       });
       void load();
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }
 
-  async function removeMember(username: string) {
-    await api(`/v1/teams/${project}/members/${username}`, { method: "DELETE" });
-    void load();
+  function removeMember(username: string) {
+    if (!confirm(t("settings.confirmRemoveMember", { username }))) return;
+    setError("");
+    void withBusy(setBusy, async () => {
+      await api(`/v1/teams/${project}/members/${username}`, { method: "DELETE" });
+      void load();
+    }, (e) => setError(errMsg(e)));
   }
 
   async function createKey(form: FormData) {
@@ -74,13 +79,17 @@ export default function Settings({ project }: { project: string }) {
       setCreated({ ak: res.access_key, sk: res.secret });
       void load();
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }
 
-  async function revokeKey(id: string) {
-    await api(`/v1/teams/${project}/access-keys/${id}`, { method: "DELETE" });
-    void load();
+  function revokeKey(id: string) {
+    if (!confirm(t("aksk.confirmRevoke"))) return;
+    setError("");
+    void withBusy(setBusy, async () => {
+      await api(`/v1/teams/${project}/access-keys/${id}`, { method: "DELETE" });
+      void load();
+    }, (e) => setError(errMsg(e)));
   }
 
   return (
@@ -102,7 +111,7 @@ export default function Settings({ project }: { project: string }) {
                     <span className="badge gray">{t(`roles.${m.role}`, m.role)}</span>
                   </td>
                   <td style={{ width: 90, textAlign: "right" }}>
-                    <button className="ghost" onClick={() => void removeMember(m.username)}>
+                    <button className="ghost" disabled={busy} onClick={() => removeMember(m.username)}>
                       {t("common.delete")}
                     </button>
                   </td>
@@ -149,7 +158,7 @@ export default function Settings({ project }: { project: string }) {
                     {k.revoked ? (
                       <span className="badge revoked">{t("aksk.revoked")}</span>
                     ) : (
-                      <button className="danger" onClick={() => void revokeKey(k.id)}>
+                      <button className="danger" disabled={busy} onClick={() => revokeKey(k.id)}>
                         {t("aksk.revoke")}
                       </button>
                     )}

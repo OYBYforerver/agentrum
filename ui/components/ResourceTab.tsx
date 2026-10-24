@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, History, Pencil, Plus, Trash2 } from "lucide-react";
-import { api } from "../lib/api";
+import { History, Pencil, Plus, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
+import { api, errMsg, withBusy } from "../lib/api";
+import CopyButton from "./CopyButton";
 
 interface ResourceRow {
   kind: string;
@@ -22,12 +23,35 @@ interface ResourceRow {
   status: { conditions?: { type: string; status: string; message?: string; reason?: string }[] };
   secret_keys: string[] | null;
   updated_at: string;
+  /** Deprecation marker (detail API); null/absent while the resource is active. */
+  deprecation?: Deprecation | null;
   latest_version: {
     tag: string | null;
     version: number;
     spec: Record<string, unknown>;
     change_notes: string | null;
   } | null;
+}
+
+/** deprecation field on ResourceOut. */
+interface Deprecation {
+  at: string;
+  by: string;
+  reason: string | null;
+  successor: string | null;
+}
+
+/** GET /v1/resources/MCPServer/{ns}/{name}/connect payload. */
+interface ConnectInfo {
+  transport: string;
+  stdio: { command: string; args?: string[]; env?: Record<string, string> } | null;
+  remote: { url: string; type?: string; headers?: Record<string, string> } | null;
+  clients?: {
+    claude_code?: string;
+    cursor?: unknown;
+    generic?: unknown;
+  };
+  notes?: string[];
 }
 
 interface VersionRow {
@@ -136,23 +160,6 @@ function buildSpec(kind: string, form: FormData): Record<string, unknown> {
   return {};
 }
 
-function CopyBtn({ text, label }: { text: string; label?: string }) {
-  const { t } = useTranslation();
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      className="ghost copy-btn"
-      onClick={() => {
-        void navigator.clipboard.writeText(text);
-        setDone(true);
-        setTimeout(() => setDone(false), 1200);
-      }}
-    >
-      <Copy size={13} /> {done ? t("detail.copied") : label || t("detail.copy")}
-    </button>
-  );
-}
-
 /** Per-kind key column: each type shows what matters to it. */
 function KeyCell({ r, onOpen }: { r: ResourceRow; onOpen: (name: string) => void }) {
   const { t } = useTranslation();
@@ -246,15 +253,58 @@ function secondaryCol(r: ResourceRow): string {
   return "";
 }
 
+/** Defaults for the publish form when re-versioning an existing resource.
+ *  Mirrors the previous spec fields so the dialog opens prefilled. */
+function prefillDefaults(kind: string, r: ResourceRow): Record<string, string> {
+  const spec = (r.latest_version?.spec || {}) as Record<string, unknown>;
+  const s = (v: unknown) => (v == null ? "" : String(v));
+  const d: Record<string, string> = {
+    name: r.name,
+    description: r.description || "",
+  };
+  if (kind === "Agent") {
+    d.f_image = s(spec.image);
+    d.f_framework = s(spec.framework);
+  } else if (kind === "MCPServer") {
+    d.f_transport = s(spec.transport);
+    d.f_endpoint = s(spec.endpoint);
+    d.f_command = s(spec.command);
+  } else if (kind === "Skill") {
+    const git = ((spec.source || {}) as Record<string, unknown>).git as Record<string, unknown> | undefined;
+    if (git) {
+      d.f_source_url = s(git.url);
+      d.f_source_ref = git.ref === "HEAD" ? "" : s(git.ref);
+      d.f_source_subdirectory = s(git.subdirectory);
+      d.f_source_credentials_ref = s(git.credentials_ref);
+    }
+    d.f_entrypoint = s(spec.entrypoint);
+    d.f_instructions = s(spec.instructions);
+  } else if (kind === "Prompt") {
+    d.f_template = s(spec.template);
+    d.f_variables = ((spec.variables || []) as { name: string; required: boolean; description: string }[])
+      .map((v) => `${v.name} | ${v.required} | ${v.description || ""}`)
+      .join("\n");
+  } else if (kind === "Deployment") {
+    d.f_target_kind = s(spec.target_kind);
+    d.f_target_namespace = s(spec.target_namespace);
+    d.f_target_name = s(spec.target_name);
+    d.f_cluster_namespace = s(spec.cluster_namespace);
+    d.f_replicas = s(spec.replicas);
+  }
+  return d;
+}
+
 export default function ResourceTab({ kind, namespace }: { kind: string; namespace: string }) {
   const { t } = useTranslation();
   const [rows, setRows] = useState<ResourceRow[]>([]);
   const [error, setError] = useState("");
   const [showPublish, setShowPublish] = useState(false);
-  const [prefill, setPrefill] = useState<Record<string, unknown> | null>(null);
+  /** Resource whose latest version prefills the publish form (new-version flow). */
+  const [prefill, setPrefill] = useState<ResourceRow | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [edit, setEdit] = useState<ResourceRow | null>(null);
   const [versions, setVersions] = useState<{ name: string; items: VersionRow[] } | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function load() {
     try {
@@ -263,7 +313,7 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
       );
       setRows(data.items);
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }
   useEffect(() => {
@@ -272,6 +322,7 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
 
   async function publish(form: FormData) {
     setError("");
+    setBusy(true);
     try {
       const body: Record<string, unknown> = {
         spec: buildSpec(kind, form),
@@ -297,7 +348,9 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
       setPrefill(null);
       void load();
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -321,7 +374,7 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
       setEdit(null);
       void load();
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }
 
@@ -345,61 +398,18 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
       await api(`/v1/resources/${r.kind}/${r.namespace}/${r.name}`, { method: "DELETE" });
       void load();
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setError(errMsg(e));
     }
   }
 
-  /** 发布新版本:预填上一版 spec */
-  async function newVersion(r: ResourceRow) {
-    setPrefill(r.latest_version?.spec || {});
+  /** 发布新版本:预填上一版 spec(纯 React,经 key 重挂载 + defaultValue 生效) */
+  function newVersion(r: ResourceRow) {
+    setPrefill(r);
     setShowPublish(true);
-    setTimeout(() => {
-      const form = document.querySelector(".dialog form") as HTMLFormElement | null;
-      if (!form) return;
-      const spec = r.latest_version?.spec || {};
-      const set = (name: string, v: unknown) => {
-        const el = form.elements.namedItem(name) as HTMLInputElement | null;
-        if (el && v != null) el.value = String(v);
-      };
-      set("name", r.name);
-      set("description", r.description);
-      if (kind === "Agent") {
-        set("f_image", spec.image);
-        set("f_framework", spec.framework);
-      } else if (kind === "MCPServer") {
-        set("f_transport", spec.transport);
-        set("f_endpoint", spec.endpoint);
-        set("f_command", spec.command);
-      } else if (kind === "Skill") {
-        const git = ((spec.source || {}) as Record<string, unknown>).git as Record<string, unknown> | undefined;
-        if (git) {
-          set("f_source_url", git.url);
-          set("f_source_ref", git.ref === "HEAD" ? "" : git.ref);
-          set("f_source_subdirectory", git.subdirectory);
-          set("f_source_credentials_ref", git.credentials_ref);
-        }
-        set("f_entrypoint", spec.entrypoint);
-        set("f_instructions", spec.instructions);
-      } else if (kind === "Prompt") {
-        set("f_template", spec.template);
-        set(
-          "f_variables",
-          ((spec.variables || []) as { name: string; required: boolean; description: string }[])
-            .map((v) => `${v.name} | ${v.required} | ${v.description || ""}`)
-            .join("\n")
-        );
-      } else if (kind === "Deployment") {
-        set("f_target_kind", spec.target_kind);
-        set("f_target_namespace", spec.target_namespace);
-        set("f_target_name", spec.target_name);
-        set("f_cluster_namespace", spec.cluster_namespace);
-        set("f_replicas", spec.replicas);
-      }
-      (form.elements.namedItem("change_notes") as HTMLTextAreaElement | null)?.focus();
-    }, 100);
   }
 
   const fields = KIND_FIELDS[kind] || [];
+  const d = prefill ? prefillDefaults(kind, prefill) : null;
 
   return (
     <div>
@@ -441,7 +451,7 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
                     onClick={() => {
                       void api<VersionRow[]>(`/v1/resources/${r.kind}/${r.namespace}/${r.name}/versions`)
                         .then((items) => setVersions({ name: r.name, items }))
-                        .catch((e) => setError(String(e).replace("Error: ", "")));
+                        .catch((e) => setError(errMsg(e)));
                     }}
                   >
                     <History size={14} />
@@ -469,13 +479,14 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
             <h3>{prefill ? t("resources.newVersion") : t("resources.publish")} · {kind}</h3>
             {prefill && <p className="muted" style={{ marginTop: -8 }}>{t("resources.prefillHint")}</p>}
             <form
+              key={prefill?.name || "__new__"}
               onSubmit={(e) => {
                 e.preventDefault();
                 void publish(new FormData(e.currentTarget));
               }}
             >
               <label>{t("publish.name")}</label>
-              <input name="name" required />
+              <input name="name" required defaultValue={d?.name} />
               <label>{t("publish.tag")}</label>
               <input name="tag" placeholder="v1.0.0" />
               {kind !== "Prompt" && kind !== "Secret" && (
@@ -489,35 +500,46 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
               )}
               {kind === "Prompt" && <p className="muted">{t("resources.promptPrivate")}</p>}
               <label>{t("publish.description")}</label>
-              <textarea name="description" rows={2} />
+              <textarea name="description" rows={2} defaultValue={d?.description} />
               {fields.map((f) => (
                 <div key={f.key}>
                   <label>{t(`fields.${f.labelKey}`)}</label>
                   {f.key === "transport" ? (
-                    <select name="f_transport" defaultValue="streamable-http">
+                    <select name="f_transport" defaultValue={d?.f_transport || "streamable-http"}>
                       <option value="streamable-http">streamable-http</option>
                       <option value="sse">sse</option>
                       <option value="stdio">stdio</option>
                     </select>
                   ) : f.key === "target_kind" ? (
-                    <select name="f_target_kind" defaultValue="Agent">
+                    <select name="f_target_kind" defaultValue={d?.f_target_kind || "Agent"}>
                       <option>Agent</option>
                       <option>MCPServer</option>
                     </select>
                   ) : f.key === "data" ? (
                     <textarea name="f_data" rows={4} placeholder={"API_KEY=xxx\nDB_URL=yyy"} />
                   ) : (
-                    <input name={`f_${f.key}`} placeholder={f.placeholder} />
+                    <input
+                      name={`f_${f.key}`}
+                      placeholder={f.placeholder}
+                      defaultValue={d?.[`f_${f.key}`]}
+                    />
                   )}
                 </div>
               ))}
               <label>{t("publish.changeNotes")}</label>
-              <textarea name="change_notes" rows={2} placeholder={t("publish.changeNotesHint")} />
+              <textarea
+                name="change_notes"
+                rows={2}
+                placeholder={t("publish.changeNotesHint")}
+                autoFocus={Boolean(prefill)}
+              />
               <div className="actions">
                 <button type="button" className="ghost" onClick={() => { setShowPublish(false); setPrefill(null); }}>
                   {t("common.cancel")}
                 </button>
-                <button className="primary">{t("publish.submit")}</button>
+                <button className="primary" disabled={busy}>
+                  {busy ? t("common.working") : t("publish.submit")}
+                </button>
               </div>
             </form>
           </div>
@@ -608,15 +630,59 @@ function DetailDialog({
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [error, setError] = useState("");
   const [vars, setVars] = useState<Record<string, string>>({});
+  const [depBusy, setDepBusy] = useState(false);
+  const [showDepForm, setShowDepForm] = useState(false);
+  const [depError, setDepError] = useState("");
+  const [cfg, setCfg] = useState<ConnectInfo | null>(null);
+  const [cfgBusy, setCfgBusy] = useState(false);
+  const [cfgError, setCfgError] = useState("");
+
+  async function reload() {
+    try {
+      setD(await api<DetailRow>(`/v1/resources/${kind}/${namespace}/${name}`));
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  }
 
   useEffect(() => {
-    void api<DetailRow>(`/v1/resources/${kind}/${namespace}/${name}`)
-      .then(setD)
-      .catch((e) => setError(String(e).replace("Error: ", "")));
+    setShowDepForm(false);
+    setDepError("");
+    setCfg(null);
+    setCfgError("");
+    void reload();
     void api<VersionRow[]>(`/v1/resources/${kind}/${namespace}/${name}/versions`)
       .then(setVersions)
       .catch(() => {});
   }, [kind, namespace, name]);
+
+  /** PATCH the deprecation flag, then refresh the detail. */
+  async function patchDeprecation(body: Record<string, unknown>) {
+    setDepError("");
+    await withBusy(setDepBusy, async () => {
+      await api(`/v1/resources/${kind}/${namespace}/${name}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+      setShowDepForm(false);
+      await reload();
+    }, (e) => setDepError(errMsg(e)));
+  }
+
+  function submitDeprecate(form: FormData) {
+    const body: Record<string, unknown> = { deprecated: true };
+    if (val(form, "dep_reason")) body.deprecation_reason = val(form, "dep_reason");
+    if (val(form, "dep_successor")) body.successor = val(form, "dep_successor");
+    void patchDeprecation(body);
+  }
+
+  /** Fetch the MCPServer connection snippets on demand. */
+  async function loadConnect() {
+    setCfgError("");
+    await withBusy(setCfgBusy, async () => {
+      setCfg(await api<ConnectInfo>(`/v1/resources/${kind}/${namespace}/${name}/connect`));
+    }, (e) => setCfgError(errMsg(e)));
+  }
 
   if (error)
     return (
@@ -631,6 +697,28 @@ function DetailDialog({
   return (
     <div className="overlay" onClick={onClose}>
       <div className="dialog" style={{ width: 700 }} onClick={(e) => e.stopPropagation()}>
+        {d.deprecation && (
+          <div className="dep-banner">
+            <div className="dep-head">
+              <TriangleAlert size={15} />
+              <strong>{t("deprecation.banner")}</strong>
+            </div>
+            {d.deprecation.reason && (
+              <div className="dep-line">{t("deprecation.reason")}: {d.deprecation.reason}</div>
+            )}
+            {d.deprecation.successor && (
+              <div className="dep-line">
+                {t("deprecation.successor")}: <span className="mono">{d.deprecation.successor}</span>
+              </div>
+            )}
+            <div className="dep-line muted">
+              {t("deprecation.byLine", {
+                name: d.deprecation.by,
+                time: d.deprecation.at.slice(0, 16).replace("T", " "),
+              })}
+            </div>
+          </div>
+        )}
         <h3>
           {d.name}{" "}
           <span className={`badge ${d.visibility}`}>{t(`visibility.${d.visibility}`, d.visibility)}</span>
@@ -664,15 +752,113 @@ function DetailDialog({
             <label>{t("detail.endpoint")}</label>
             <div className="snippet-row">
               <pre className="pre-soft mono" style={{ flex: 1, margin: 0 }}>{String(spec.endpoint)}</pre>
-              <CopyBtn text={String(spec.endpoint)} />
+              <CopyButton text={String(spec.endpoint)} />
             </div>
             <label>{t("detail.cursorConfig")}</label>
             <div className="snippet-row">
               <pre className="pre-soft mono" style={{ flex: 1, margin: 0 }}>
                 {JSON.stringify({ mcpServers: { [d.name]: { url: String(spec.endpoint) } } }, null, 2)}
               </pre>
-              <CopyBtn text={JSON.stringify({ mcpServers: { [d.name]: { url: String(spec.endpoint) } } }, null, 2)} />
+              <CopyButton text={JSON.stringify({ mcpServers: { [d.name]: { url: String(spec.endpoint) } } }, null, 2)} />
             </div>
+          </>
+        )}
+
+        {kind === "MCPServer" && (
+          <>
+            <div className="row-between">
+              <label>{t("connect.title")}</label>
+              <button className="ghost copy-btn" disabled={cfgBusy} onClick={() => void loadConnect()}>
+                <RefreshCw size={13} /> {cfgBusy ? t("common.working") : cfg ? t("connect.refresh") : t("connect.getCfg")}
+              </button>
+            </div>
+            {cfgError && <p className="error" style={{ margin: "6px 0" }}>{cfgError}</p>}
+            {cfg && (
+              <div>
+                {cfg.transport === "stdio" && cfg.stdio && (
+                  <>
+                    <label>{t("connect.command")}</label>
+                    <div className="snippet-row">
+                      <pre className="pre-soft mono" style={{ flex: 1, margin: 0 }}>
+                        {[cfg.stdio.command, ...(cfg.stdio.args || [])].join(" ")}
+                      </pre>
+                      <CopyButton
+                        text={[cfg.stdio.command, ...(cfg.stdio.args || [])].join(" ")}
+                        copiedLabel={t("connect.copied")}
+                      />
+                    </div>
+                  </>
+                )}
+                {cfg.transport !== "stdio" && cfg.remote && (
+                  <>
+                    <label>{t("connect.url")}</label>
+                    <div className="snippet-row">
+                      <pre className="pre-soft mono" style={{ flex: 1, margin: 0 }}>{cfg.remote.url}</pre>
+                      <CopyButton text={cfg.remote.url} copiedLabel={t("connect.copied")} />
+                    </div>
+                    {cfg.remote.headers && Object.keys(cfg.remote.headers).length > 0 && (
+                      <>
+                        <label>{t("connect.headers")}</label>
+                        <div className="snippet-row">
+                          <pre className="pre-soft mono" style={{ flex: 1, margin: 0 }}>
+                            {Object.entries(cfg.remote.headers).map(([k, v]) => `${k}: ${v}`).join("\n")}
+                          </pre>
+                          <CopyButton
+                            text={Object.entries(cfg.remote.headers).map(([k, v]) => `${k}: ${v}`).join("\n")}
+                            copiedLabel={t("connect.copied")}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                {cfg.clients?.claude_code && (
+                  <>
+                    <label>{t("connect.claudeCode")}</label>
+                    <div className="snippet-row">
+                      <pre className="pre-soft mono" style={{ flex: 1, margin: 0 }}>{cfg.clients.claude_code}</pre>
+                      <CopyButton text={cfg.clients.claude_code} copiedLabel={t("connect.copied")} />
+                    </div>
+                  </>
+                )}
+                {cfg.clients?.cursor ? (
+                  <>
+                    <label>{t("connect.cursor")}</label>
+                    <div className="snippet-row">
+                      <pre className="pre-soft mono" style={{ flex: 1, margin: 0 }}>
+                        {JSON.stringify(cfg.clients.cursor, null, 2)}
+                      </pre>
+                      <CopyButton
+                        text={JSON.stringify(cfg.clients.cursor, null, 2)}
+                        copiedLabel={t("connect.copied")}
+                      />
+                    </div>
+                  </>
+                ) : null}
+                {cfg.clients?.generic ? (
+                  <>
+                    <label>{t("connect.generic")}</label>
+                    <div className="snippet-row">
+                      <pre className="pre-soft mono" style={{ flex: 1, margin: 0 }}>
+                        {JSON.stringify(cfg.clients.generic, null, 2)}
+                      </pre>
+                      <CopyButton
+                        text={JSON.stringify(cfg.clients.generic, null, 2)}
+                        copiedLabel={t("connect.copied")}
+                      />
+                    </div>
+                  </>
+                ) : null}
+                {(cfg.notes?.length || 0) > 0 && (
+                  <>
+                    <label>{t("connect.notes")}</label>
+                    {cfg.notes!.map((n, i) => (
+                      <p key={i} className="muted" style={{ fontSize: 12, margin: "3px 0" }}>· {n}</p>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -681,7 +867,7 @@ function DetailDialog({
             <label>{t("detail.pullCommand")}</label>
             <div className="snippet-row">
               <pre className="pre-soft mono" style={{ flex: 1, margin: 0 }}>docker pull {String(spec.image)}</pre>
-              <CopyBtn text={`docker pull ${String(spec.image)}`} />
+              <CopyButton text={`docker pull ${String(spec.image)}`} />
             </div>
             {(spec.env as unknown[] | undefined)?.length ? (
               <p className="muted">{t("detail.envVars")}: {(spec.env as { name: string }[]).map((e) => e.name).join(", ")}</p>
@@ -700,7 +886,7 @@ function DetailDialog({
                   <pre className="pre-soft mono" style={{ flex: 1, margin: 0 }}>
                     {String(git.url)} @ {String(git.ref)} ({String(git.resolved_sha || "").slice(0, 10)})
                   </pre>
-                  <CopyBtn text={`git clone ${String(git.url)}`} label={t("detail.clone")} />
+                  <CopyButton text={`git clone ${String(git.url)}`} label={t("detail.clone")} />
                 </div>
                 {drift && (
                   <p style={{ margin: "8px 0" }}>
@@ -731,7 +917,7 @@ function DetailDialog({
               {String(spec.template || "").replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => vars[k] || `{{${k}}}`)}
             </pre>
             <div className="snippet-row" style={{ marginBottom: 10 }}>
-              <CopyBtn text={String(spec.template || "")} label={t("detail.copyTemplate")} />
+              <CopyButton text={String(spec.template || "")} label={t("detail.copyTemplate")} />
             </div>
           </>
         )}
@@ -771,7 +957,42 @@ function DetailDialog({
             ))}
           </tbody>
         </table>
+        {depError && <p className="error" style={{ margin: "8px 0 0" }}>{depError}</p>}
+        {showDepForm && !d.deprecation && (
+          <form
+            className="dep-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitDeprecate(new FormData(e.currentTarget));
+            }}
+          >
+            <label>{t("deprecation.reasonLabel")}</label>
+            <input name="dep_reason" placeholder={t("deprecation.reasonPlaceholder")} />
+            <label>{t("deprecation.successorLabel")}</label>
+            <input name="dep_successor" placeholder={t("deprecation.successorPlaceholder")} />
+            <div className="actions" style={{ marginTop: 12 }}>
+              <button type="button" className="ghost" onClick={() => setShowDepForm(false)}>
+                {t("common.cancel")}
+              </button>
+              <button className="primary" disabled={depBusy}>
+                {depBusy ? t("common.working") : t("deprecation.confirm")}
+              </button>
+            </div>
+          </form>
+        )}
         <div className="actions">
+          <button
+            className="ghost"
+            style={{ marginRight: "auto" }}
+            disabled={depBusy}
+            title={d.deprecation ? t("deprecation.undeprecate") : t("deprecation.action")}
+            onClick={() => {
+              if (d.deprecation) void patchDeprecation({ deprecated: false });
+              else setShowDepForm((v) => !v);
+            }}
+          >
+            {d.deprecation ? t("deprecation.undeprecate") : t("deprecation.action")}
+          </button>
           <button className="primary" onClick={onClose}>{t("common.ok")}</button>
         </div>
       </div>

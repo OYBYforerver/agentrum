@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../lib/api";
+import { api, errMsg } from "../lib/api";
 
 interface ActivityRow {
   action: string;
@@ -38,7 +38,7 @@ export default function Overview({
   useEffect(() => {
     void api<Stats>(`/v1/teams/${project}/stats`)
       .then(setStats)
-      .catch((e) => setError(String(e).replace("Error: ", "")));
+      .catch((e) => setError(errMsg(e)));
     void api<ActivityRow[]>(`/v1/teams/${project}/activity`)
       .then(setActivity)
       .catch(() => {});

@@ -6,7 +6,8 @@
   "common": {
     "ok": "OK",
     "cancel": "Cancel",
-    "delete": "Delete"
+    "delete": "Delete",
+    "working": "Working…"
   },
   "login": {
     "heading": "Sign in",
@@ -123,12 +124,14 @@
     "searchName": "Type to search resources…",
     "pickNamespaceFirst": "Pick a target namespace first",
     "noMatch": "No match (or not visible to you)",
-    "wholeNamespaceHint": "Leave the name empty to subscribe to the whole namespace (notified on every new version)"
+    "wholeNamespaceHint": "Leave the name empty to subscribe to the whole namespace (notified on every new version)",
+    "confirmRevoke": "Unsubscribe from {{target}}?"
   },
   "settings": {
     "members": "Members",
     "username": "Username",
-    "addMember": "Add member"
+    "addMember": "Add member",
+    "confirmRemoveMember": "Remove member {{username}} from this project?"
   },
   "aksk": {
     "heading": "AK/SK credentials",
@@ -143,7 +146,8 @@
     "neverUsed": "never used",
     "revoked": "revoked",
     "revoke": "Revoke",
-    "empty": "No AK/SK yet"
+    "empty": "No AK/SK yet",
+    "confirmRevoke": "Revoke this AK/SK? CLIs / CI using it will immediately lose access"
   },
   "lang": {
     "label": "Language"
@@ -211,7 +215,34 @@
     "gitSource": "Git source",
     "drift": "Upstream drift",
     "previewTitle": "Fill variables → live preview",
-    "copyTemplate": "Copy template"
+    "copyTemplate": "Copy template",
+    "copyFailed": "Copy failed"
+  },
+  "deprecation": {
+    "banner": "This resource is deprecated",
+    "action": "Deprecate…",
+    "undeprecate": "Undeprecate",
+    "reason": "Reason",
+    "successor": "Successor",
+    "byLine": "Deprecated by {{name}} at {{time}}",
+    "reasonLabel": "Reason (optional)",
+    "reasonPlaceholder": "Why it is deprecated (e.g. superseded by v2)",
+    "successorLabel": "Successor (optional, ns/name)",
+    "successorPlaceholder": "team-a/my-server-v2",
+    "confirm": "Deprecate"
+  },
+  "connect": {
+    "title": "Connect",
+    "getCfg": "Get connection config",
+    "refresh": "Refresh",
+    "copied": "Copied",
+    "claudeCode": "Claude Code",
+    "cursor": "Cursor",
+    "generic": "Generic (JSON)",
+    "command": "Local command (stdio)",
+    "url": "URL",
+    "headers": "Headers",
+    "notes": "Notes"
   },
   "search": {
     "placeholder": "Search projects / resources…"
