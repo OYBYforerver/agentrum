@@ -388,3 +388,84 @@ def test_team_creation_with_designated_owner():  # pragma: no cover
             assert r.status_code == 201, r.text
 
     asyncio.run(inner())
+
+
+def test_deploy_scope_and_ownership_transfer():  # pragma: no cover
+    """deploy scope gates Deployment resources for AK principals; ownership
+    transfer reassigns the owner and demotes the previous one."""
+    import asyncio
+    import base64
+
+    import httpx
+    from httpx import ASGITransport
+
+    from agentrum.main import _ensure_bootstrap_admin
+
+    async def inner():
+        await _ensure_bootstrap_admin()
+        sfx = _suffix()
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=__import__("agentrum.main", fromlist=["app"]).app),
+            base_url="http://test",
+        ) as c:
+            r = await c.post("/v1/auth/login", json={"username": "admin", "password": "admin123"})
+            admin = {"Authorization": f"Bearer {r.json()['access_token']}"}
+            team = f"dep-scope-{sfx}"
+            await c.post("/v1/teams", headers=admin, json={"name": team})
+            await c.put(
+                f"/v1/resources/Agent/{team}/target",
+                headers=admin,
+                json={"spec": {"image": "reg.local/t:1"}, "tag": "v1"},
+            )
+
+            # AK with publish scope only → Deployment creation denied
+            r = await c.post(
+                f"/v1/teams/{team}/access-keys", headers=admin,
+                json={"name": "pub-only", "scopes": ["read", "publish"]},
+            )
+            ak, sk = r.json()["access_key"], r.json()["secret"]
+            pub = {"Authorization": "Basic " + base64.b64encode(f"{ak}:{sk}".encode()).decode()}
+            r = await c.put(
+                f"/v1/resources/Deployment/{team}/dep1", headers=pub,
+                json={"spec": {"target_kind": "Agent", "target_namespace": team, "target_name": "target"}},
+            )
+            assert r.status_code == 403 and "deploy" in r.json()["detail"], r.text
+
+            # AK with deploy scope → allowed
+            r = await c.post(
+                f"/v1/teams/{team}/access-keys", headers=admin,
+                json={"name": "deployer", "scopes": ["read", "deploy"]},
+            )
+            ak2, sk2 = r.json()["access_key"], r.json()["secret"]
+            dep = {"Authorization": "Basic " + base64.b64encode(f"{ak2}:{sk2}".encode()).decode()}
+            r = await c.put(
+                f"/v1/resources/Deployment/{team}/dep2", headers=dep,
+                json={"spec": {"target_kind": "Agent", "target_namespace": team, "target_name": "target"}},
+            )
+            assert r.status_code == 201, r.text
+
+            # ownership transfer: admin creates project for owner-u, then transfers to member-u
+            await c.post("/v1/users", headers=admin, json={"username": f"own-u-{sfx}", "password": "password-123"})
+            await c.post("/v1/users", headers=admin, json={"username": f"mem-u-{sfx}", "password": "password-123"})
+            team2 = f"trans-{sfx}"
+            await c.post("/v1/teams", headers=admin, json={"name": team2, "owner": f"own-u-{sfx}"})
+            await c.post(
+                f"/v1/teams/{team2}/members", headers=admin,
+                json={"username": f"mem-u-{sfx}", "role": "member"},
+            )
+            r = await c.patch(
+                f"/v1/teams/{team2}/owner", headers=admin,
+                json={"username": f"mem-u-{sfx}"},
+            )
+            assert r.status_code == 200, r.text
+            # new owner manages members; previous owner demoted to member
+            r = await c.post(
+                "/v1/auth/login", json={"username": f"mem-u-{sfx}", "password": "password-123"}
+            )
+            new_owner = {"Authorization": f"Bearer {r.json()['access_token']}"}
+            r = await c.get(f"/v1/teams/{team2}/members", headers=new_owner)
+            roles = {m["username"]: m["role"] for m in r.json()}
+            assert roles[f"mem-u-{sfx}"] == "admin"
+            assert roles[f"own-u-{sfx}"] == "member"
+
+    asyncio.run(inner())

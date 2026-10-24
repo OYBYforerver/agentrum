@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -169,6 +170,33 @@ async def team_stats(
         "subscribers": subscriber_rows,
         "pending_approvals": pending,
     }
+
+
+class OwnerTransferIn(BaseModel):
+    username: str
+
+
+@router.patch("/{team_name}/owner", response_model=TeamOut)
+async def transfer_ownership(
+    team_name: str,
+    body: OwnerTransferIn,
+    request: Request,
+    user: models.User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> TeamOut:
+    team = await team_service.get_team(session, team_name)
+    new_owner = (
+        await session.execute(select(models.User).where(models.User.username == body.username))
+    ).scalar_one_or_none()
+    if new_owner is None:
+        raise errors.NotFoundError(f"user {body.username!r} not found")
+    await team_service.transfer_ownership(
+        session, user, team, new_owner, source_ip=_client_ip(request)
+    )
+    return TeamOut(
+        id=str(team.id), name=team.name, display_name=team.display_name,
+        description=team.description, my_role="admin",
+    )
 
 
 @router.get("/{team_name}/activity", response_model=list[dict])

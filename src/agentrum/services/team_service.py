@@ -119,7 +119,10 @@ async def create_team(
         if owner.disabled_at is not None:
             raise errors.ValidationError(f"owner user {owner_username!r} is disabled")
 
-    team = models.Team(name=name, display_name=display_name, description=description)
+    team = models.Team(
+        name=name, display_name=display_name, description=description,
+        owner_user_id=owner.id,
+    )
     session.add(team)
     await session.flush()
     # Every team starts with a namespace of the same name; the owner becomes
@@ -149,6 +152,39 @@ async def list_teams(session: AsyncSession, actor: models.User) -> list[tuple[mo
         )
     ).all()
     return [(team, models.ROLE_ADMIN if actor.is_platform_admin else role) for team, role in rows]
+
+
+async def transfer_ownership(
+    session: AsyncSession, actor: models.User, team: models.Team, new_owner: models.User,
+    source_ip: str | None = None,
+) -> None:
+    """Transfer project ownership. Allowed for the current owner or a
+    platform admin. The new owner becomes an admin member; the previous
+    owner is demoted to member (unless a platform admin)."""
+    if not actor.is_platform_admin and team.owner_user_id != actor.id:
+        raise errors.PermissionDeniedError("only the current owner can transfer ownership")
+    if new_owner.disabled_at is not None:
+        raise errors.ValidationError(f"user {new_owner.username!r} is disabled")
+
+    member = await session.get(models.TeamMember, (team.id, new_owner.id))
+    if member is not None:
+        member.role = models.ROLE_ADMIN
+    else:
+        session.add(models.TeamMember(team_id=team.id, user_id=new_owner.id, role=models.ROLE_ADMIN))
+
+    if team.owner_user_id and team.owner_user_id != new_owner.id:
+        prev = await session.get(models.TeamMember, (team.id, team.owner_user_id))
+        if prev is not None and not (
+            await session.get(models.User, team.owner_user_id)
+        ).is_platform_admin:
+            prev.role = models.ROLE_MEMBER
+
+    team.owner_user_id = new_owner.id
+    await audit.record(
+        session, actor=actor, action="team.transfer_owner",
+        detail={"team": team.name, "owner": new_owner.username}, source_ip=source_ip,
+    )
+    await session.commit()
 
 
 async def list_members(session: AsyncSession, actor: models.User, team: models.Team):

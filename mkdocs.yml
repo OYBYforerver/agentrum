@@ -50,6 +50,7 @@ nav:
       - IDE 接入(MCP): ide.md
   - 管理与运维:
       - 架构: architecture.md
+      - 权限模型: permissions.md
       - SSO 接入(管理员): sso.md
       - 运维手册: operations.md
   - 路线图: roadmap.md

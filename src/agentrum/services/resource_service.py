@@ -35,7 +35,7 @@ def normalize_kind(raw: str) -> str:
 
 
 async def _require_publish_role(
-    session: AsyncSession, actor: models.User, namespace_name: str
+    session: AsyncSession, actor: models.User, namespace_name: str, kind: str | None = None
 ) -> models.Namespace:
     ns = await session.get(models.Namespace, namespace_name)
     if ns is None:
@@ -45,8 +45,11 @@ async def _require_publish_role(
             raise errors.PermissionDeniedError(
                 f"access key is scoped to a different project, not {namespace_name!r}"
             )
-        if not has_scope("publish"):
-            raise errors.PermissionDeniedError("access key lacks the 'publish' scope")
+        # Deployment resources gate on the dedicated deploy scope — creating
+        # one triggers cluster reconciliation (publish ≉ run).
+        needed = "deploy" if kind == "Deployment" else "publish"
+        if not has_scope(needed):
+            raise errors.PermissionDeniedError(f"access key lacks the '{needed}' scope")
         return ns
     if actor.is_platform_admin:
         return ns
@@ -143,7 +146,7 @@ async def apply(
     if data.tag is not None and not TAG_RE.match(data.tag):
         raise errors.ValidationError("tag must be 1-63 chars of letters, digits, '.', '_' or '-'")
     # Authorization first: unauthorized callers never see schema details.
-    await _require_publish_role(session, actor, namespace)
+    await _require_publish_role(session, actor, namespace, kind=kind)
     spec = validate_spec(kind, data.spec)
 
     # Prompts are project-private: visibility is forced, cross-project sharing
@@ -392,7 +395,7 @@ async def delete_resource(
     resource = await _get_resource(session, kind, namespace, name)
     if resource is None:
         raise errors.NotFoundError(f"{kind.lower()}/{namespace}/{name} not found")
-    await _require_publish_role(session, actor, namespace)
+    await _require_publish_role(session, actor, namespace, kind=kind)
     resource.deleted_at = datetime.now(UTC)
     await audit.record(
         session, actor=actor, action="resource.delete", kind=kind, namespace=namespace, name=name,

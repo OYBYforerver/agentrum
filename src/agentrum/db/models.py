@@ -90,6 +90,8 @@ class Team(Base):
     name: Mapped[str] = mapped_column(String(63), unique=True)
     display_name: Mapped[str | None] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text)
+    # Explicit ownership: the admin member responsible for the project.
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

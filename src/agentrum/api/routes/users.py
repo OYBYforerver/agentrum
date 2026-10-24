@@ -26,6 +26,7 @@ class UserPatchIn(BaseModel):
     display_name: str | None = None
     disabled: bool | None = None
     is_platform_admin: bool | None = None
+    new_password: str | None = None  # admin-initiated password reset
 
 
 class UserOut(BaseModel):
@@ -83,6 +84,10 @@ async def patch_user(
     if user.id == admin.id and body.disabled is True:
         raise HTTPException(status_code=400, detail="cannot disable your own account")
 
+    if body.new_password is not None:
+        if len(body.new_password) < 8:
+            raise HTTPException(status_code=400, detail="password must be at least 8 chars")
+        user.password_hash = security.hash_password(body.new_password)
     if body.display_name is not None:
         user.display_name = body.display_name
     if body.is_platform_admin is not None:
