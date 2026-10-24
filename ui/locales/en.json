@@ -147,6 +147,29 @@
     "source_url": "Git repository URL (or leave empty for inline)",
     "source_ref": "Branch / Tag / Commit",
     "source_subdirectory": "Subdirectory in repo (optional)",
-    "source_credentials_ref": "Credentials Secret name (private repos)"
+    "source_credentials_ref": "Credentials Secret name (private repos)",
+    "keywords": "Keywords (comma-separated)",
+    "authors": "Authors (comma-separated)",
+    "license": "License",
+    "docs_link": "Docs link",
+    "long_description": "Long description (Markdown)",
+    "variables": "Template variables (one per line: name | true/false | description)"
+  },
+  "overview": {
+    "nav": "Overview",
+    "total": "Total resources",
+    "week": "Published (7d)",
+    "subscribers": "Subscribers",
+    "pending": "Pending approvals",
+    "subsHint": "Manage resources this project subscribes to"
+  },
+  "detail": {
+    "longDescription": "Long description",
+    "authors": "Authors",
+    "license": "License",
+    "docs": "Docs",
+    "status": "Runtime status",
+    "secretKeys": "Secret keys",
+    "spec": "Current spec"
   }
 }

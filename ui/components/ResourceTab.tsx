@@ -18,6 +18,7 @@ interface ResourceRow {
 interface VersionRow {
   version: number;
   tag: string | null;
+  spec: Record<string, unknown>;
   change_notes: string | null;
   published_by: string;
   created_at: string;
@@ -78,7 +79,20 @@ function buildSpec(kind: string, form: FormData): Record<string, unknown> {
     if (val("f_instructions")) s.instructions = val("f_instructions");
     return s;
   }
-  if (kind === "Prompt") return { template: val("f_template") };
+  if (kind === "Prompt") {
+    const s: Record<string, unknown> = { template: val("f_template") };
+    const variables = val("f_variables")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [name, req, desc] = line.split("|").map((x) => x.trim());
+        return { name, required: (req || "").toLowerCase() === "true", description: desc || null };
+      })
+      .filter((v) => v.name);
+    if (variables.length) s.variables = variables;
+    return s;
+  }
   if (kind === "Secret") {
     const data: Record<string, string> = {};
     for (const line of val("f_data").split("\n")) {
@@ -100,11 +114,132 @@ function buildSpec(kind: string, form: FormData): Record<string, unknown> {
   return {};
 }
 
+interface DetailRow extends Omit<ResourceRow, "latest_version"> {
+  latest_version: {
+    tag: string | null;
+    version: number;
+    spec: Record<string, unknown>;
+    change_notes: string | null;
+  } | null;
+  labels: Record<string, string>;
+  status: { conditions?: { type: string; status: string; message?: string; reason?: string }[] };
+  catalog: {
+    title?: string;
+    long_description?: string;
+    keywords?: string[];
+    authors?: string[];
+    license?: string;
+    links?: Record<string, string>;
+  };
+}
+
+function DetailDialog({
+  kind,
+  namespace,
+  name,
+  onClose,
+}: {
+  kind: string;
+  namespace: string;
+  name: string;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [d, setD] = useState<DetailRow | null>(null);
+  const [versions, setVersions] = useState<VersionRow[]>([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    void api<DetailRow>(`/v1/resources/${kind}/${namespace}/${name}`)
+      .then(setD)
+      .catch((e) => setError(String(e).replace("Error: ", "")));
+    void api<VersionRow[]>(`/v1/resources/${kind}/${namespace}/${name}/versions`)
+      .then(setVersions)
+      .catch(() => {});
+  }, [kind, namespace, name]);
+
+  if (error) return <div className="overlay" onClick={onClose}><div className="dialog" onClick={(e) => e.stopPropagation()}><p className="error">{error}</p></div></div>;
+  if (!d) return null;
+  const cat = d.catalog || {};
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="dialog" style={{ width: 680 }} onClick={(e) => e.stopPropagation()}>
+        <h3>
+          {d.name}{" "}
+          <span className={`badge ${d.visibility}`}>{t(`visibility.${d.visibility}`, d.visibility)}</span>
+        </h3>
+        {d.description && <p style={{ marginTop: 0 }}>{d.description}</p>}
+        {(cat.keywords?.length || 0) > 0 && (
+          <p>
+            {cat.keywords!.map((k) => (
+              <span key={k} className="badge gray" style={{ marginRight: 6 }}>{k}</span>
+            ))}
+          </p>
+        )}
+        {cat.long_description && (
+          <>
+            <label>{t("detail.longDescription")}</label>
+            <pre style={{ whiteSpace: "pre-wrap", background: "var(--accent-soft)", padding: 12, borderRadius: 8 }}>{cat.long_description}</pre>
+          </>
+        )}
+        <div className="grid2">
+          {cat.authors?.length ? <p className="muted">{t("detail.authors")}: {cat.authors.join(", ")}</p> : null}
+          {cat.license ? <p className="muted">{t("detail.license")}: {cat.license}</p> : null}
+          {cat.links?.docs ? (
+            <p className="muted">
+              {t("detail.docs")}: <a href={cat.links.docs} target="_blank" rel="noreferrer">{cat.links.docs}</a>
+            </p>
+          ) : null}
+        </div>
+        {(d.status?.conditions?.length || 0) > 0 && (
+          <>
+            <label>{t("detail.status")}</label>
+            {d.status!.conditions!.map((c, i) => (
+              <p key={i} className="muted" style={{ margin: "4px 0" }}>
+                <span className={`badge ${c.status === "True" ? "active" : "revoked"}`}>{c.type}: {c.status}</span>{" "}
+                {c.message} {c.reason ? `(${c.reason})` : ""}
+              </p>
+            ))}
+          </>
+        )}
+        {d.secret_keys && (
+          <p className="muted">{t("detail.secretKeys")}: {d.secret_keys.join(", ")}</p>
+        )}
+        <label>{t("detail.spec")}</label>
+        <pre style={{ maxHeight: 200, overflow: "auto", background: "var(--accent-soft)", padding: 12, borderRadius: 8, fontSize: 12 }}>
+          {JSON.stringify(d.latest_version?.spec ?? {}, null, 2)}
+        </pre>
+        <label>{t("resources.versions")}</label>
+        <table>
+          <tbody>
+            {versions.map((v) => (
+              <tr key={v.version}>
+                <td style={{ whiteSpace: "nowrap" }}><strong>{v.tag || `v${v.version}`}</strong></td>
+                <td>
+                  {v.change_notes || <span className="muted">—</span>}
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {v.published_by} · {v.created_at.slice(0, 16).replace("T", " ")}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="actions">
+          <button className="primary" onClick={onClose}>{t("common.ok")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ResourceTab({ kind, namespace }: { kind: string; namespace: string }) {
   const { t } = useTranslation();
   const [rows, setRows] = useState<ResourceRow[]>([]);
   const [error, setError] = useState("");
   const [showPublish, setShowPublish] = useState(false);
+  const [detail, setDetail] = useState<string | null>(null);
   const [versions, setVersions] = useState<{ name: string; items: VersionRow[] } | null>(null);
 
   async function load() {
@@ -133,6 +268,18 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
       if (kind !== "Prompt" && kind !== "Secret") {
         body.visibility = String(form.get("visibility"));
       }
+      const catalog: Record<string, unknown> = {};
+      const splitList = (k: string) =>
+        String(form.get(k) || "")
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean);
+      if (splitList("c_keywords").length) catalog.keywords = splitList("c_keywords");
+      if (splitList("c_authors").length) catalog.authors = splitList("c_authors");
+      if (String(form.get("c_license") || "").trim()) catalog.license = String(form.get("c_license")).trim();
+      if (String(form.get("c_docs") || "").trim()) catalog.links = { docs: String(form.get("c_docs")).trim() };
+      if (String(form.get("c_long") || "").trim()) catalog.long_description = String(form.get("c_long")).trim();
+      if (Object.keys(catalog).length) body.catalog = catalog;
       const name = String(form.get("name"));
       await api(`/v1/resources/${kind}/${namespace}/${name}`, {
         method: "PUT",
@@ -190,7 +337,12 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
             {rows.map((r) => (
               <tr key={r.name}>
                 <td>
-                  <strong>{r.name}</strong>
+                  <strong>
+                    <a href="#" style={{ color: "var(--accent)", textDecoration: "none" }}
+                       onClick={(e) => { e.preventDefault(); setDetail(r.name); }}>
+                      {r.name}
+                    </a>
+                  </strong>
                   {r.description && <div className="muted" style={{ fontSize: 12 }}>{r.description}</div>}
                 </td>
                 <td>
@@ -247,6 +399,34 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
               {kind === "Prompt" && <p className="muted">{t("resources.promptPrivate")}</p>}
               <label>{t("publish.description")}</label>
               <textarea name="description" rows={2} />
+              {kind !== "Secret" && kind !== "Deployment" && (
+                <>
+                  <label>{t("fields.keywords")}</label>
+                  <input name="c_keywords" placeholder="payment, mcp" />
+                  <div className="grid2">
+                    <div>
+                      <label>{t("fields.authors")}</label>
+                      <input name="c_authors" placeholder="alice" />
+                    </div>
+                    <div>
+                      <label>{t("fields.license")}</label>
+                      <input name="c_license" placeholder="Apache-2.0" />
+                    </div>
+                  </div>
+                  <label>{t("fields.docs_link")}</label>
+                  <input name="c_docs" placeholder="https://docs.example.com/gateway" />
+                </>
+              )}
+              {kind === "Prompt" && (
+                <>
+                  <label>{t("fields.variables")}</label>
+                  <textarea
+                    name="f_variables"
+                    rows={3}
+                    placeholder={"concerns | true | \u91cd\u70b9\u5173\u6ce8\u7684\u98ce\u9669\u70b9\ncode | false | \u4ee3\u7801\u5185\u5bb9"}
+                  />
+                </>
+              )}
               {fields.map((f) => (
                 <div key={f.key}>
                   <label>{t(`fields.${f.labelKey}`)}</label>
@@ -279,6 +459,10 @@ export default function ResourceTab({ kind, namespace }: { kind: string; namespa
             </form>
           </div>
         </div>
+      )}
+
+      {detail && (
+        <DetailDialog kind={kind} namespace={namespace} name={detail} onClose={() => setDetail(null)} />
       )}
 
       {versions && (

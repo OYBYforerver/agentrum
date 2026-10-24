@@ -2,7 +2,7 @@ apiVersion: v2
 name: agentrum
 description: Multi-tenant registry for AI agents, MCP servers, skills and prompts
 type: application
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.3.0
+appVersion: "0.3.0"
 home: https://github.com/agentrum/agentrum
 license: Apache-2.0

@@ -31,7 +31,19 @@ catalog:                       # mutable catalog metadata (no new version)
 | `Agent` | `image` | `framework`, `env[]` | env entry: `{name, value}` or `{name, value_from: {secret_ref: {name, key, namespace?}}}` |
 | `MCPServer` | `transport` + (`endpoint` or `command`) | `env[]` | transport ∈ `streamable-http / sse / stdio`; http kinds require endpoint, stdio requires command |
 | `Skill` | `source.git.url` or `instructions` (either) | `entrypoint`, `source.git.ref/subdirectory/credentials_ref` | see git-source section |
-| `Prompt` | `template` | variable declarations planned | **project-private**; cross-project subscription rejected |
+| `Prompt` | `template` | `variables[]` (`{name, required, description}`) | **project-private**; cross-project subscription rejected |
+
+Declared variables power structured forms in the console and structured MCP consumption:
+
+```yaml
+kind: Prompt
+metadata: {name: review-checklist, namespace: payment}
+spec:
+  template: "Review this change, focus on {{concerns}}"
+  variables:
+    - {name: concerns, required: true, description: risk areas to focus on}
+    - {name: code, description: the code}
+```
 | `Secret` | `data` (key/value object) | — | values envelope-encrypted, never returned; defaults to `restricted` |
 | `Deployment` | `target_kind/target_namespace/target_name` | `tag` (pin), `cluster_namespace`, `replicas`, `port`, `image_pull_policy` | see Deploy to Kubernetes |
 

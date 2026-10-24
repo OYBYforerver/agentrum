@@ -47,6 +47,7 @@ nav:
       - 资源规范(agentrum.yaml): resources.md
       - 订阅与通知: subscribe.md
       - 部署接入(K8s): deploy.md
+      - IDE 接入(MCP): ide.md
   - 管理与运维:
       - 架构: architecture.md
       - SSO 接入(管理员): sso.md

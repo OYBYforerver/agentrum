@@ -5,11 +5,13 @@ import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
 import { setLocale } from "../lib/i18n";
 import { toggleTheme } from "../lib/theme";
+import Overview from "./Overview";
 import ResourceTab from "./ResourceTab";
 import Settings from "./Settings";
 import Subscriptions from "./Subscriptions";
 
 type View =
+  | { tab: "overview" }
   | { tab: "MCP Servers" }
   | { tab: "Agents" }
   | { tab: "Skills" }
@@ -36,7 +38,7 @@ export default function Workspace({
   onExit: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const [view, setView] = useState<View>({ tab: "MCP Servers" });
+  const [view, setView] = useState<View>({ tab: "overview" });
   const [allProjects, setAllProjects] = useState<string[]>([project]);
 
   useEffect(() => {
@@ -77,6 +79,12 @@ export default function Workspace({
           <span>🏠</span> {t("nav.myProjects")}
         </button>
         <div style={{ height: 12 }} />
+        <button
+          className={`nav-item ${view.tab === "overview" ? "active" : ""}`}
+          onClick={() => setView({ tab: "overview" })}
+        >
+          <span>📊</span> {t("overview.nav")}
+        </button>
         {RESOURCE_TABS.map((rt) => (
           <button
             key={rt.id}
@@ -124,7 +132,9 @@ export default function Workspace({
           <span>{project}</span>
         </div>
         <h2 className="page">
-          {view.tab === "subscriptions"
+          {view.tab === "overview"
+            ? t("overview.nav")
+            : view.tab === "subscriptions"
             ? t("subs.mine")
             : view.tab === "settings"
               ? t("nav.settings")
@@ -137,7 +147,9 @@ export default function Workspace({
             </span>
           )}
         </h2>
-        {kindOf ? (
+        {view.tab === "overview" ? (
+          <Overview project={project} onOpen={(tab) => setView({ tab } as View)} />
+        ) : kindOf ? (
           <ResourceTab kind={kindOf} namespace={project} />
         ) : view.tab === "subscriptions" ? (
           <Subscriptions project={project} />

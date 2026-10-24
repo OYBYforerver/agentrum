@@ -56,6 +56,10 @@ async def _ensure_bootstrap_admin() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from agentrum.mcp_server import mcp as _mcp
+
+    mcp_lifespan = _mcp.session_manager.run()  # async CM (manager created at import)
+    await mcp_lifespan.__aenter__()
     await _ensure_bootstrap_admin()
     tasks = [
         notification_dispatcher.start_dispatcher(),
@@ -72,6 +76,7 @@ async def lifespan(_app: FastAPI):
         import asyncio
 
         await asyncio.gather(*tasks, return_exceptions=True)
+        await mcp_lifespan.__aexit__(None, None, None)
 
 
 def create_app() -> FastAPI:
@@ -101,6 +106,13 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router)
     install_error_handlers(app)
+
+    # Registry-as-MCP-server: IDE-facing read-only tools at /mcp
+    # (mounted at root: the sub-app itself serves POST /mcp; its session
+    # manager runs inside our lifespan to avoid "task group not initialized")
+    from agentrum.mcp_server import mcp
+
+    app.mount("/", mcp.streamable_http_app())
 
     if settings.otel_enabled:
         _setup_tracing(app)

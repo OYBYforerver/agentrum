@@ -46,8 +46,8 @@ curl -s -u "$ARK_AK:$ARK_SK" $SERVER/v1/resources
  "latest_version": {"version": 3, "tag": "v1.3.0", "spec": {...},
                     "change_notes": "...", "published_by": "alice"}}
 
-// 失败
-{"detail": "tag 'v1.2.0' already exists; tags are immutable"}
+// 失败(稳定错误码,便于程序化处理与本地化)
+{"code": "conflict", "detail": "tag 'v1.2.0' already exists; tags are immutable"}
 ```
 
 | 状态码 | 含义 |

@@ -147,6 +147,29 @@
     "source_url": "Git 仓库地址(或留空用下方直录)",
     "source_ref": "分支 / Tag / Commit",
     "source_subdirectory": "仓库内子目录(可选)",
-    "source_credentials_ref": "凭据 Secret 名称(私有仓库可选)"
+    "source_credentials_ref": "凭据 Secret 名称(私有仓库可选)",
+    "keywords": "关键词(逗号分隔)",
+    "authors": "作者(逗号分隔)",
+    "license": "许可证",
+    "docs_link": "文档链接",
+    "long_description": "详细介绍(Markdown)",
+    "variables": "模板变量(每行:名称 | true/false | 说明)"
+  },
+  "overview": {
+    "nav": "概览",
+    "total": "资源总数",
+    "week": "近 7 天发布",
+    "subscribers": "订阅方",
+    "pending": "待审批",
+    "subsHint": "管理本项目订阅的别家资源"
+  },
+  "detail": {
+    "longDescription": "详细介绍",
+    "authors": "作者",
+    "license": "许可证",
+    "docs": "文档",
+    "status": "运行状态",
+    "secretKeys": "Secret 键",
+    "spec": "当前版本 Spec"
   }
 }

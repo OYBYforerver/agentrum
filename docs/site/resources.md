@@ -31,7 +31,19 @@ catalog:                       # 目录元数据(可变,不产生新版本)
 | `Agent` | `image` | `framework`、`env[]` | env 项:`{name, value}` 或 `{name, value_from: {secret_ref: {name, key, namespace?}}}` |
 | `MCPServer` | `transport` +(`endpoint` 或 `command`) | `env[]` | transport ∈ `streamable-http / sse / stdio`;http 类必须给 endpoint,stdio 必须给 command |
 | `Skill` | `source.git.url` 或 `instructions`(二选一) | `entrypoint`、`source.git.ref/subdirectory/credentials_ref` | git 来源见下节 |
-| `Prompt` | `template` | 变量声明规划中 | **仅本项目可见**;跨项目订阅直接拒绝 |
+| `Prompt` | `template` | `variables[]`(`{name, required, description}`) | **仅本项目可见**;跨项目订阅直接拒绝 |
+
+`variables` 声明模板变量,供控制台表单与 MCP 调用方结构化使用:
+
+```yaml
+kind: Prompt
+metadata: {name: review-checklist, namespace: payment}
+spec:
+  template: "请评审以下变更,关注 {{concerns}}"
+  variables:
+    - {name: concerns, required: true, description: 重点关注的风险点}
+    - {name: code, description: 代码内容}
+```
 | `Secret` | `data`(键值对象) | — | 值信封加密,永不回显;默认 `restricted` |
 | `Deployment` | `target_kind/target_namespace/target_name` | `tag`(锁定版本)、`cluster_namespace`、`replicas`、`port`、`image_pull_policy` | 见《部署接入》 |
 

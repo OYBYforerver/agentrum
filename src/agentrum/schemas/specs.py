@@ -87,8 +87,25 @@ class SkillSpec(BaseSpec):
         return self
 
 
+class PromptVariable(BaseModel):
+    """Declared template variable: powers structured forms and MCP callers."""
+
+    name: str
+    required: bool = False
+    description: str | None = None
+
+
 class PromptSpec(BaseSpec):
     template: str
+    variables: list[PromptVariable] = []
+
+    @model_validator(mode="after")
+    def _unique_names(self) -> "PromptSpec":
+        names = [v.name for v in self.variables]
+        dupes = {n for n in names if names.count(n) > 1}
+        if dupes:
+            raise ValueError(f"duplicate variable names: {sorted(dupes)}")
+        return self
 
 
 class DeploymentSpec(BaseSpec):

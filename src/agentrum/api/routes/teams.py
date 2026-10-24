@@ -109,6 +109,67 @@ async def remove_member(
     await team_service.remove_member(session, user, team, username, source_ip=_client_ip(request))
 
 
+@router.get("/{team_name}/stats", response_model=dict)
+async def team_stats(
+    team_name: str,
+    user: models.User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Project overview metrics for the console landing page."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func, select
+
+    team = await team_service.get_team(session, team_name)
+    await team_service.require_member(session, user, team)
+
+    by_kind = dict(
+        (
+            await session.execute(
+                select(models.Resource.kind, func.count())
+                .where(
+                    models.Resource.namespace == team.name,
+                    models.Resource.deleted_at.is_(None),
+                )
+                .group_by(models.Resource.kind)
+            )
+        ).all()
+    )
+    published_7d = (
+        await session.execute(
+            select(func.count())
+            .select_from(models.ResourceVersion)
+            .join(models.Resource, models.Resource.id == models.ResourceVersion.resource_id)
+            .where(
+                models.Resource.namespace == team.name,
+                models.ResourceVersion.created_at >= datetime.now(UTC) - timedelta(days=7),
+            )
+        )
+    ).scalar_one()
+    subscriber_rows = (
+        await session.execute(
+            select(func.count(func.distinct(models.Subscription.subscriber_team_id)))
+            .join(models.Namespace, models.Namespace.name == models.Subscription.namespace)
+            .where(models.Namespace.team_id == team.id, models.Subscription.status == models.SUB_ACTIVE)
+        )
+    ).scalar_one()
+    pending = (
+        await session.execute(
+            select(func.count())
+            .select_from(models.Subscription)
+            .join(models.Namespace, models.Namespace.name == models.Subscription.namespace)
+            .where(models.Namespace.team_id == team.id, models.Subscription.status == models.SUB_PENDING)
+        )
+    ).scalar_one()
+    return {
+        "resources_by_kind": by_kind,
+        "total_resources": sum(by_kind.values()),
+        "published_last_7d": published_7d,
+        "subscribers": subscriber_rows,
+        "pending_approvals": pending,
+    }
+
+
 @router.get("/{team_name}/consumers", response_model=list[dict])
 async def list_consumers(
     team_name: str,
@@ -134,19 +195,33 @@ async def list_consumers(
     ]
 
 
-# Domain errors are surfaced as clean 4xx responses here to keep routers thin.
+# Errors are surfaced as machine-readable {code, detail} envelopes here to
+# keep routers thin. Codes are stable identifiers for CLI/UI localization.
 def install_error_handlers(app) -> None:  # pragma: no cover
+    from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse
-
-    status_map = {
-        errors.NotFoundError: 404,
-        errors.PermissionDeniedError: 403,
-        errors.ConflictError: 409,
-        errors.ValidationError: 400,
-        errors.AgentrumError: 400,
-    }
+    from starlette.exceptions import HTTPException as StarletteHTTPException
 
     @app.exception_handler(errors.AgentrumError)
-    async def _handle(request: Request, exc: errors.AgentrumError):
-        code = status_map.get(type(exc), 400)
-        return JSONResponse(status_code=code, content={"detail": str(exc)})
+    async def _domain(request: Request, exc: errors.AgentrumError):
+        return JSONResponse(
+            status_code=exc.status,
+            content={"code": exc.code, "detail": exc.detail, **exc.context},
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http(request: Request, exc: StarletteHTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"code": f"http_{exc.status_code}", "detail": str(exc.detail)},
+            headers=getattr(exc, "headers", None),
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation(request: Request, exc: RequestValidationError):
+        first = exc.errors()[0] if exc.errors() else {}
+        loc = ".".join(str(p) for p in first.get("loc", []))
+        return JSONResponse(
+            status_code=422,
+            content={"code": "invalid_request", "detail": f"{loc}: {first.get('msg', 'invalid')}"},
+        )

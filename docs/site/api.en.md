@@ -46,8 +46,8 @@ Quick rules:
  "latest_version": {"version": 3, "tag": "v1.3.0", "spec": {...},
                     "change_notes": "...", "published_by": "alice"}}
 
-// Failure
-{"detail": "tag 'v1.2.0' already exists; tags are immutable"}
+// Failure (stable machine-readable code + human detail)
+{"code": "conflict", "detail": "tag 'v1.2.0' already exists; tags are immutable"}
 ```
 
 | Status | Meaning |
