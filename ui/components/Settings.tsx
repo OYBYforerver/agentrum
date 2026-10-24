@@ -116,6 +116,7 @@ export default function Settings({ project }: { project: string }) {
           <select name="role" defaultValue="member">
             <option value="admin">{t("roles.admin")}</option>
             <option value="publisher">{t("roles.publisher")}</option>
+            <option value="developer">{t("roles.developer")}</option>
             <option value="member">{t("roles.member")}</option>
           </select>
           <button className="primary">{t("settings.addMember")}</button>

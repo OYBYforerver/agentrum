@@ -37,6 +37,9 @@ def normalize_kind(raw: str) -> str:
 async def _require_publish_role(
     session: AsyncSession, actor: models.User, namespace_name: str, kind: str | None = None
 ) -> models.Namespace:
+    """Publish/update rights. Developers may publish ordinary resources but
+    not Deployments (deployment rights sit with publisher/admin or a key
+    carrying the deploy scope)."""
     ns = await session.get(models.Namespace, namespace_name)
     if ns is None:
         raise errors.NotFoundError(f"namespace {namespace_name!r} not found")
@@ -54,11 +57,40 @@ async def _require_publish_role(
     if actor.is_platform_admin:
         return ns
     role = await team_service.get_team_role(session, actor.id, ns.team_id)
-    if role not in (models.ROLE_ADMIN, models.ROLE_PUBLISHER):
+    if kind == "Deployment" and role == models.ROLE_DEVELOPER:
         raise errors.PermissionDeniedError(
-            f"publisher role required in namespace {namespace_name!r}"
+            "developer role cannot manage deployments"
+        )
+    if role not in (models.ROLE_ADMIN, models.ROLE_PUBLISHER, models.ROLE_DEVELOPER):
+        raise errors.PermissionDeniedError(
+            f"developer role or higher required in namespace {namespace_name!r}"
         )
     return ns
+
+
+async def _require_delete_role(
+    session: AsyncSession, actor: models.User, namespace_name: str
+) -> None:
+    """Delete is a separate capability: developers can publish but never
+    delete (misoperation protection). AK principals delete with publish."""
+    ns = await session.get(models.Namespace, namespace_name)
+    if ns is None:
+        raise errors.NotFoundError(f"namespace {namespace_name!r} not found")
+    if ak_project_id() is not None:
+        if ak_project_id() != str(ns.team_id):
+            raise errors.PermissionDeniedError(
+                f"access key is scoped to a different project, not {namespace_name!r}"
+            )
+        if not has_scope("publish"):
+            raise errors.PermissionDeniedError("access key lacks the 'publish' scope")
+        return
+    if actor.is_platform_admin:
+        return
+    role = await team_service.get_team_role(session, actor.id, ns.team_id)
+    if role not in (models.ROLE_ADMIN, models.ROLE_PUBLISHER):
+        raise errors.PermissionDeniedError(
+            f"deleting requires publisher role or higher in {namespace_name!r}"
+        )
 
 
 async def _get_resource(
@@ -395,7 +427,7 @@ async def delete_resource(
     resource = await _get_resource(session, kind, namespace, name)
     if resource is None:
         raise errors.NotFoundError(f"{kind.lower()}/{namespace}/{name} not found")
-    await _require_publish_role(session, actor, namespace, kind=kind)
+    await _require_delete_role(session, actor, namespace)
     resource.deleted_at = datetime.now(UTC)
     await audit.record(
         session, actor=actor, action="resource.delete", kind=kind, namespace=namespace, name=name,

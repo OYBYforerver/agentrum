@@ -151,7 +151,8 @@
   "roles": {
     "admin": "管理员",
     "publisher": "发布者",
-    "member": "成员"
+    "member": "成员",
+    "developer": "开发者"
   },
   "scopes": {
     "read": "读取",

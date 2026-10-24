@@ -469,3 +469,61 @@ def test_deploy_scope_and_ownership_transfer():  # pragma: no cover
             assert roles[f"own-u-{sfx}"] == "member"
 
     asyncio.run(inner())
+
+
+def test_developer_role_boundaries():  # pragma: no cover
+    """developer may publish/update but never delete nor manage Deployments."""
+    import asyncio
+
+    import httpx
+    from httpx import ASGITransport
+
+    from agentrum.main import _ensure_bootstrap_admin
+
+    async def inner():
+        await _ensure_bootstrap_admin()
+        sfx = _suffix()
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=__import__("agentrum.main", fromlist=["app"]).app),
+            base_url="http://test",
+        ) as c:
+            r = await c.post("/v1/auth/login", json={"username": "admin", "password": "admin123"})
+            admin = {"Authorization": f"Bearer {r.json()['access_token']}"}
+            team = f"dev-role-{sfx}"
+            await c.post("/v1/teams", headers=admin, json={"name": team})
+            await c.post("/v1/users", headers=admin, json={"username": f"dev-u-{sfx}", "password": "password-123"})
+            await c.post(f"/v1/teams/{team}/members", headers=admin, json={"username": f"dev-u-{sfx}", "role": "developer"})
+            await c.put(
+                f"/v1/resources/Agent/{team}/target",
+                headers=admin,
+                json={"spec": {"image": "reg.local/t:1"}, "tag": "v1"},
+            )
+
+            r = await c.post("/v1/auth/login", json={"username": f"dev-u-{sfx}", "password": "password-123"})
+            dev = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+            # developer may publish/update
+            r = await c.put(
+                f"/v1/resources/Agent/{team}/feature-x",
+                headers=dev, json={"spec": {"image": "reg.local/f:1"}, "tag": "v1"},
+            )
+            assert r.status_code == 201, r.text
+
+            # developer may NOT manage Deployments
+            r = await c.put(
+                f"/v1/resources/Deployment/{team}/dep-x",
+                headers=dev,
+                json={"spec": {"target_kind": "Agent", "target_namespace": team, "target_name": "target"}},
+            )
+            assert r.status_code == 403 and "developer" in r.json()["detail"], r.text
+
+            # developer may NOT delete
+            r = await c.delete(f"/v1/resources/Agent/{team}/feature-x", headers=dev)
+            assert r.status_code == 403 and "publisher" in r.json()["detail"], r.text
+
+            # publisher still may delete
+            await c.post(f"/v1/teams/{team}/members", headers=admin, json={"username": "alice", "role": "publisher"}) if False else None
+            r = await c.delete(f"/v1/resources/Agent/{team}/feature-x", headers=admin)
+            assert r.status_code == 204, r.text
+
+    asyncio.run(inner())

@@ -151,7 +151,8 @@
   "roles": {
     "admin": "admin",
     "publisher": "publisher",
-    "member": "member"
+    "member": "member",
+    "developer": "developer"
   },
   "scopes": {
     "read": "read",

@@ -13,7 +13,7 @@ from agentrum.db import models
 TEAM_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")
 
 # Ordered from most to least privileged.
-ROLES = (models.ROLE_ADMIN, models.ROLE_PUBLISHER, models.ROLE_MEMBER)
+ROLES = (models.ROLE_ADMIN, models.ROLE_PUBLISHER, models.ROLE_DEVELOPER, models.ROLE_MEMBER)
 
 
 async def get_team(session: AsyncSession, name: str) -> models.Team:
@@ -58,7 +58,10 @@ async def require_member(
             )
         if minimum == models.ROLE_ADMIN:
             raise errors.PermissionDeniedError("access keys cannot perform admin operations")
-        needed = "publish" if minimum in (models.ROLE_ADMIN, models.ROLE_PUBLISHER) else "read"
+        if minimum in (models.ROLE_ADMIN, models.ROLE_PUBLISHER) or minimum == models.ROLE_DEVELOPER:
+            needed = "publish"
+        else:
+            needed = "read"
         if has_scope(needed):
             return models.ROLE_PUBLISHER if needed == "publish" else models.ROLE_MEMBER
         raise errors.PermissionDeniedError(f"access key lacks the '{needed}' scope")

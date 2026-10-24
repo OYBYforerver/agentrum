@@ -25,6 +25,7 @@ KINDS = ("Agent", "MCPServer", "Skill", "Prompt", "Secret", "Deployment")
 
 ROLE_ADMIN = "admin"
 ROLE_PUBLISHER = "publisher"
+ROLE_DEVELOPER = "developer"
 ROLE_MEMBER = "member"
 ROLES = (ROLE_ADMIN, ROLE_PUBLISHER, ROLE_MEMBER)
 
@@ -99,7 +100,9 @@ class Team(Base):
 
 class TeamMember(Base):
     __tablename__ = "team_members"
-    __table_args__ = (CheckConstraint("role IN ('admin','publisher','member')", name="ck_member_role"),)
+    __table_args__ = (
+        CheckConstraint("role IN ('admin','publisher','developer','member')", name="ck_member_role"),
+    )
 
     team_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True

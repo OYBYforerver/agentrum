@@ -11,19 +11,22 @@ Agentrum permissions have four orthogonal dimensions: **platform role × project
 | User management (create/disable/reset password/promote) | ✅ | ❌ |
 | Audit query, notification pipeline observability | ✅ | ❌ |
 
-## Project roles (owner / admin / publisher / member)
+## Project roles (owner / admin / publisher / developer / member)
 
-| Operation | Owner/Admin | Publisher | Member |
-|---|---|---|---|
-| Manage members | ✅ | ❌ | ❌ |
-| Create/revoke project AK/SK | ✅ | ❌ | ❌ |
-| Transfer ownership | Owner only | ❌ | ❌ |
-| Publish/update resources (PUT) | ✅ | ✅ | ❌ |
-| Edit metadata (PATCH, no version) | ✅ | ✅ | ❌ |
-| Soft-delete resources | ✅ | ✅ | ❌ |
-| Approve subscription requests (targeting this project) | ✅ | ❌ | ❌ |
-| Revoke grants (targeting this project) | ✅ | ❌ | ❌ |
-| Create subscriptions (as subscriber) | ✅ | ✅ | ✅ |
+| Operation | Owner/Admin | Publisher | Developer | Member |
+|---|---|---|---|---|
+| Manage members | ✅ | ❌ | ❌ | ❌ |
+| Create/revoke project AK/SK | ✅ | ❌ | ❌ | ❌ |
+| Transfer ownership | Owner only | ❌ | ❌ | ❌ |
+| Publish/update resources (PUT) | ✅ | ✅ | ✅ | ❌ |
+| **Manage Deployments** | ✅ | ✅ | ❌ | ❌ |
+| Edit metadata (PATCH, no version) | ✅ | ✅ | ✅ | ❌ |
+| **Soft-delete resources** | ✅ | ✅ | **❌** | ❌ |
+| Approve subscription requests | ✅ | ❌ | ❌ | ❌ |
+| Revoke grants | ✅ | ❌ | ❌ | ❌ |
+| Create subscriptions | ✅ | ✅ | ✅ | ✅ |
+
+Developer vs publisher boundary: publish yes, delete no, deployments no — misoperation protection and deployment-rights separation.
 
 ## Resource visibility (read)
 
