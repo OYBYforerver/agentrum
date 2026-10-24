@@ -5,6 +5,7 @@ class TeamCreateIn(BaseModel):
     name: str
     display_name: str | None = None
     description: str | None = None
+    owner: str | None = None  # username of the project owner (admin); defaults to creator
 
 
 class TeamOut(BaseModel):

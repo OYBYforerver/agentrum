@@ -63,7 +63,10 @@
     "pickHint": "Click a card to enter the project",
     "res": "{{count}} resources",
     "subs": "{{count}} subscribers",
-    "pub": "{{count}} published (7d)"
+    "pub": "{{count}} published (7d)",
+    "owner": "Project owner (admin)",
+    "ownerPlaceholder": "Search and pick a user; empty = yourself",
+    "ownerHint": "The owner becomes the project admin responsible for members and resources; platform admins keep global access"
   },
   "resources": {
     "publish": "Publish",

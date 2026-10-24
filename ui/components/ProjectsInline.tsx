@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Boxes, Plus, Rocket, Users } from "lucide-react";
+import { ArrowRight, Boxes, Plus, Rocket, Search, Users } from "lucide-react";
 import { api } from "../lib/api";
 
 interface TeamRow {
@@ -49,12 +49,20 @@ export default function ProjectsInline({
   const [meta, setMeta] = useState<Record<string, CardState>>({});
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [users, setUsers] = useState<{ username: string; display_name: string | null }[]>([]);
+  const [ownerQuery, setOwnerQuery] = useState("");
+  const [ownerVal, setOwnerVal] = useState("");
 
   async function load() {
     try {
       const teams = await api<TeamRow[]>("/v1/teams");
       setRows(teams);
       setMe(await api<{ is_platform_admin: boolean }>("/v1/auth/me"));
+      if (me?.is_platform_admin || me === null) {
+        void api<{ username: string; display_name: string | null }[]>("/v1/users")
+          .then(setUsers)
+          .catch(() => {});
+      }
       for (const tm of teams) {
         try {
           const stats = await api<Stats>(`/v1/teams/${tm.name}/stats`);
@@ -93,9 +101,12 @@ export default function ProjectsInline({
           name: String(form.get("name")),
           display_name: String(form.get("display_name")) || null,
           description: String(form.get("description")) || null,
+          owner: ownerVal || null,
         }),
       });
       setShowCreate(false);
+      setOwnerVal("");
+      setOwnerQuery("");
       void load();
     } catch (e) {
       setError(String(e).replace("Error: ", ""));
@@ -180,6 +191,49 @@ export default function ProjectsInline({
               <input name="display_name" placeholder="支付平台组" />
               <label>{t("publish.description")}</label>
               <textarea name="description" rows={2} />
+              <label>{t("projects.owner")}</label>
+              <div className="combo">
+                <input
+                  value={ownerVal}
+                  placeholder={t("projects.ownerPlaceholder")}
+                  onChange={(e) => {
+                    setOwnerVal(e.target.value);
+                    setOwnerQuery(e.target.value);
+                  }}
+                  onFocus={() => setOwnerQuery(" ")}
+                  onBlur={() => setTimeout(() => setOwnerQuery(""), 150)}
+                />
+                {ownerQuery !== "" && (
+                  <div className="combo-list">
+                    {users
+                      .filter(
+                        (u) =>
+                          u.username.includes(ownerQuery.toLowerCase()) ||
+                          (u.display_name || "").toLowerCase().includes(ownerQuery.toLowerCase())
+                      )
+                      .slice(0, 8)
+                      .map((u) => (
+                        <div
+                          key={u.username}
+                          className="combo-item"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setOwnerVal(u.username);
+                            setOwnerQuery("");
+                          }}
+                        >
+                          <div>
+                            <strong>{u.username}</strong>
+                            {u.display_name && (
+                              <div className="muted" style={{ fontSize: 12 }}>{u.display_name}</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>{t("projects.ownerHint")}</p>
               {error && <p className="error">{error}</p>}
               <div className="actions">
                 <button type="button" className="ghost" onClick={() => setShowCreate(false)}>

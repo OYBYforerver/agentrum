@@ -63,7 +63,10 @@
     "pickHint": "点击卡片进入对应项目",
     "res": "{{count}} 资源",
     "subs": "{{count}} 订阅方",
-    "pub": "7 天发布 {{count}}"
+    "pub": "7 天发布 {{count}}",
+    "owner": "项目 Owner(管理员)",
+    "ownerPlaceholder": "搜索并选择用户,留空则指定为自己",
+    "ownerHint": "Owner 将成为该项目的管理员,负责成员与资源管理;平台管理员保留全局管控"
   },
   "resources": {
     "publish": "发布",

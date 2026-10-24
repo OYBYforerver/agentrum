@@ -337,3 +337,54 @@ def test_owner_can_revoke_grant():  # pragma: no cover
             assert r.status_code == 403, r.text
 
     asyncio.run(inner())
+
+
+def test_team_creation_with_designated_owner():  # pragma: no cover
+    """Admin creates a project designating another user as owner: the owner
+    becomes the project admin, the creator is not a member, and the owner can
+    publish in the project namespace."""
+    import asyncio
+
+    import httpx
+    from httpx import ASGITransport
+
+    from agentrum.main import _ensure_bootstrap_admin
+
+    async def inner():
+        await _ensure_bootstrap_admin()
+        sfx = _suffix()
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=__import__("agentrum.main", fromlist=["app"]).app),
+            base_url="http://test",
+        ) as c:
+            r = await c.post("/v1/auth/login", json={"username": "admin", "password": "admin123"})
+            admin = {"Authorization": f"Bearer {r.json()['access_token']}"}
+            owner_name = f"own-{sfx}"
+            team = f"own-proj-{sfx}"
+
+            await c.post("/v1/users", headers=admin, json={"username": owner_name, "password": "password-123"})
+            r = await c.post(
+                "/v1/teams", headers=admin,
+                json={"name": team, "owner": owner_name},
+            )
+            assert r.status_code == 201, r.text
+            assert r.json()["my_role"] is None, "creator should not be a member when owner is designated"
+
+            # owner login → publish in the project namespace
+            r = await c.post("/v1/auth/login", json={"username": owner_name, "password": "password-123"})
+            owner = {"Authorization": f"Bearer {r.json()['access_token']}"}
+            r = await c.put(
+                f"/v1/resources/Skill/{team}/skill-x",
+                headers=owner,
+                json={"spec": {"instructions": "demo"}},
+            )
+            assert r.status_code == 201, r.text
+
+            # owner manages members
+            r = await c.post(
+                f"/v1/teams/{team}/members", headers=owner,
+                json={"username": "admin", "role": "member"},
+            )
+            assert r.status_code == 201, r.text
+
+    asyncio.run(inner())

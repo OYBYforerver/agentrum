@@ -25,11 +25,12 @@ async def create_team(
 ) -> TeamOut:
     team = await team_service.create_team(
         session, user, body.name, body.display_name, body.description,
-        source_ip=_client_ip(request),
+        owner_username=body.owner, source_ip=_client_ip(request),
     )
+    role = await team_service.get_team_role(session, user.id, team.id)
     return TeamOut(
         id=str(team.id), name=team.name, display_name=team.display_name,
-        description=team.description, my_role="admin",
+        description=team.description, my_role=role,
     )
 
 

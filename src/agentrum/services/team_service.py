@@ -95,7 +95,8 @@ async def usernames(session: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UU
 
 async def create_team(
     session: AsyncSession, actor: models.User, name: str, display_name: str | None,
-    description: str | None, source_ip: str | None = None,
+    description: str | None, owner_username: str | None = None,
+    source_ip: str | None = None,
 ) -> models.Team:
     if not actor.is_platform_admin:
         raise errors.PermissionDeniedError("only platform admins can create teams")
@@ -107,13 +108,29 @@ async def create_team(
     if existing is not None:
         raise errors.ConflictError(f"team {name!r} already exists")
 
+    # Resolve the designated owner (defaults to the creating admin).
+    owner = actor
+    if owner_username and owner_username != actor.username:
+        owner = (
+            await session.execute(select(models.User).where(models.User.username == owner_username))
+        ).scalar_one_or_none()
+        if owner is None:
+            raise errors.NotFoundError(f"owner user {owner_username!r} not found")
+        if owner.disabled_at is not None:
+            raise errors.ValidationError(f"owner user {owner_username!r} is disabled")
+
     team = models.Team(name=name, display_name=display_name, description=description)
     session.add(team)
     await session.flush()
-    # Every team starts with a namespace of the same name and its creator as admin.
+    # Every team starts with a namespace of the same name; the owner becomes
+    # its admin. When an owner is designated, the creator is NOT added as a
+    # member (platform admins retain global access regardless).
     session.add(models.Namespace(name=name, team_id=team.id))
-    session.add(models.TeamMember(team_id=team.id, user_id=actor.id, role=models.ROLE_ADMIN))
-    await audit.record(session, actor=actor, action="team.create", detail={"team": name}, source_ip=source_ip)
+    session.add(models.TeamMember(team_id=team.id, user_id=owner.id, role=models.ROLE_ADMIN))
+    await audit.record(
+        session, actor=actor, action="team.create",
+        detail={"team": name, "owner": owner.username}, source_ip=source_ip,
+    )
     await session.commit()
     await session.refresh(team)
     return team
