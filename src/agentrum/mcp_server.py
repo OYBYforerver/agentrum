@@ -23,7 +23,8 @@ mcp = MCPServer(
     instructions=(
         "Agentrum: the multi-tenant registry for AI agents, MCP servers, "
         "skills and prompts. Use list_resources to discover approved assets "
-        "and get_resource for details (including MCP server endpoints)."
+        "and get_resource for details — MCP server entries carry a `connect` "
+        "block with ready-to-paste client configuration."
     ),
 )
 
@@ -35,7 +36,15 @@ def _bearer_from_ctx(ctx: Context) -> str | None:
 
 async def _resolve_principal(ctx: Context) -> models.User:
     """Resolve the calling principal (JWT or AK/SK) from the HTTP request."""
+    from fastapi import HTTPException
+
+    from agentrum.auth.ak_context import ak_project_id_var, ak_scopes_var
     from agentrum.auth.deps import _resolve_access_key, _resolve_credential
+
+    # Same defensive reset as the REST path: reused tasks must not inherit a
+    # previous call's AK project/scopes.
+    ak_project_id_var.set(None)
+    ak_scopes_var.set(())
 
     auth = _bearer_from_ctx(ctx) or ""
     async with SessionLocal() as session:
@@ -47,7 +56,14 @@ async def _resolve_principal(ctx: Context) -> models.User:
             except Exception as exc:
                 raise PermissionError("malformed Basic credentials") from exc
             username, _, password = raw.partition(":")
-            user = await _resolve_access_key(None, session, username, password)
+            try:
+                # IP-based rate limiting is meaningless for server-side MCP
+                # calls (one shared source address); the per-AK lockout stays.
+                user = await _resolve_access_key(
+                    None, session, username, password, enforce_ip_limit=False
+                )
+            except HTTPException as exc:
+                raise PermissionError(str(exc.detail)) from exc
         else:
             user = None
     if user is None:
@@ -119,6 +135,7 @@ async def list_resources(
                 "ref": f"{r.kind}/{r.namespace}/{r.name}",
                 "visibility": r.visibility,
                 "description": r.description,
+                "deprecated": r.deprecation is not None,
                 "latest_tag": (latest[r.id].tag if r.id in latest else None),
                 "published_by": names.get(r.created_by),
             }
@@ -150,10 +167,15 @@ async def get_resource(ctx: Context, ref: str, tag: str = "") -> str:
         from agentrum.services import secret_service
 
         secret_keys = (
-            sorted((await secret_service.get_payloads(session, resource.id)).keys())
+            sorted(await secret_service.get_secret_keys(session, resource.id))
             if resource.kind == "Secret"
             else None
         )
+        connect = None
+        if resource.kind == "MCPServer" and rv is not None:
+            from agentrum.services import connect_service
+
+            connect = connect_service.build(resource, rv.spec or {})
     return _dump(
         {
             "kind": resource.kind,
@@ -163,7 +185,9 @@ async def get_resource(ctx: Context, ref: str, tag: str = "") -> str:
             "description": resource.description,
             "catalog": resource.catalog or {},
             "status": resource.status or {},
+            "deprecation": resource.deprecation,
             "secret_keys": secret_keys,
+            "connect": connect,
             "spec": (rv.spec if rv else {}),
             "tag": (rv.tag if rv else None),
             "version": (rv.version if rv else None),

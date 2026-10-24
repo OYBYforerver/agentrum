@@ -219,7 +219,7 @@ def test_access_keys_and_prompt_privacy():  # pragma: no cover
             r = await c.put(
                 f"/v1/resources/Prompt/{pub_team}/greeting",
                 headers=basic,
-                json={"spec": {"template": "hello {{name}}"}, "tag": "v1"},
+                json={"spec": {"template": "hello {{name}}", "variables": [{"name": "name"}]}, "tag": "v1"},
             )
             assert r.status_code == 201, r.text
             assert r.json()["visibility"] == "private", r.text

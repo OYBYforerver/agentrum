@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import ClassVar
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,17 +14,35 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 480
     bootstrap_admin_username: str = "admin"
     bootstrap_admin_password: str = "admin123"
+    # Escape hatch for local dev / CI: permits the default secret_key and the
+    # admin123 bootstrap password. Never set in production.
+    allow_insecure: bool = False
 
     # Security hardening
     allowed_origins: str = "*"  # comma-separated list; "*" allows all (dev only)
     max_body_bytes: int = 2 * 1024 * 1024  # 2 MiB cap for request bodies
     log_format: str = "console"  # "console" or "json"
+    # Serve the built console (Next.js static export) from this directory.
+    ui_dir: str | None = None
+    metrics_enabled: bool = True
+
+    # Credentials lifecycle. API tokens default to a one-year expiry and can
+    # never outlive api_token_max_expire_days.
+    api_token_default_expire_days: int = 365
+    api_token_max_expire_days: int = 3650
+    access_key_max_expire_days: int = 3650
+    # Trust this reverse-proxy header for client IPs (e.g. "X-Forwarded-For");
+    # only enable when the proxy chain actually overwrites it.
+    client_ip_header: str | None = None
 
     # Login throttling (per-process; Redis-backed global limiting comes in Phase B)
     login_max_per_window: int = 10
     login_window_seconds: int = 60
     lockout_threshold: int = 5
     lockout_seconds: int = 600
+    # Failures per username across all source IPs — raises the bar for
+    # lockout-DoS against a victim behind a shared egress IP.
+    lockout_username_threshold: int = 20
 
     # Notifications (transactional outbox + background dispatcher)
     feishu_webhook_url: str | None = None  # Feishu custom bot webhook
@@ -52,9 +71,13 @@ class Settings(BaseSettings):
     # "registry.internal/,ghcr.io/acme/". Empty means allow-all (dev only).
     image_allowlist: str = ""
     ui_origin: str | None = None  # where OIDC callbacks redirect with the token
+    # Skill publishing: remote git resolution gets this many seconds before
+    # the request fails, so a hanging remote cannot pin a DB transaction.
+    git_timeout_seconds: int = 30
 
     # Probes & maintenance
     probe_interval_seconds: int = 60
+    probe_tls_verify: bool = True  # disable only for self-signed test endpoints
     audit_retention_days: int = 180
     notification_retention_days: int = 30
     skill_drift_interval_seconds: int = 300  # git-sourced skill upstream check (0 disables)
@@ -65,6 +88,23 @@ class Settings(BaseSettings):
     # OpenTelemetry tracing (OTLP HTTP exporter), disabled by default
     otel_enabled: bool = False
     otel_endpoint: str = "http://localhost:4318/v1/traces"
+
+
+    DEFAULT_SECRET_KEY: ClassVar[str] = "dev-insecure-change-me"
+    DEFAULT_BOOTSTRAP_PASSWORD: ClassVar[str] = "admin123"
+
+    def assert_safe_secrets(self) -> None:
+        """Refuse to run with publicly-known signing material unless the
+        operator explicitly opts in with ARK_ALLOW_INSECURE=true."""
+        if self.allow_insecure:
+            return
+        if self.secret_key == self.DEFAULT_SECRET_KEY or len(self.secret_key) < 32:
+            raise RuntimeError(
+                "ARK_SECRET_KEY is unset, the built-in default, or shorter than 32 "
+                "characters — JWTs would be forgeable. Generate one with "
+                "`openssl rand -hex 32`, or set ARK_ALLOW_INSECURE=true to "
+                "explicitly keep the insecure development setup."
+            )
 
 
 @lru_cache

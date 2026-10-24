@@ -2,7 +2,6 @@
 
 import json
 import os
-import stat
 from pathlib import Path
 
 import httpx
@@ -24,9 +23,25 @@ def _load_credentials() -> dict:
 
 
 def _save_credentials(data: dict) -> None:
+    """Atomically create the credentials file with 0600 — no world-readable
+    window between write and chmod."""
     _CREDENTIALS.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-    _CREDENTIALS.write_text(json.dumps(data))
-    _CREDENTIALS.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    tmp = _CREDENTIALS.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(json.dumps(data))
+    os.replace(tmp, _CREDENTIALS)
+
+
+def _detail(resp: httpx.Response) -> str:
+    """Best-effort error detail: proxies and error pages are not JSON."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return resp.text[:200]
+    if isinstance(body, dict):
+        return str(body.get("detail") or body)
+    return str(body)
 
 
 def _server() -> str:
@@ -80,7 +95,7 @@ def login(
         typer.echo(f"cannot reach {server}: {exc}", err=True)
         raise typer.Exit(1) from None
     if resp.status_code != 200:
-        typer.echo(f"login failed ({resp.status_code}): {resp.json().get('detail', resp.text)}", err=True)
+        typer.echo(f"login failed ({resp.status_code}): {_detail(resp)}", err=True)
         raise typer.Exit(1)
     _save_credentials({"server": server.rstrip("/"), "token": resp.json()["access_token"]})
     typer.echo(f"✔ logged in to {server} as {username}")
@@ -98,6 +113,10 @@ def apply(
     with httpx.Client(base_url=_server(), headers=_headers(), timeout=30) as client:
         failed = 0
         for doc in docs:
+            if not isinstance(doc, dict):
+                typer.echo("✘ manifest contains a non-object document", err=True)
+                failed += 1
+                continue
             kind = doc.get("kind", "")
             meta = doc.get("metadata") or {}
             name = meta.get("name", "")
@@ -112,8 +131,7 @@ def apply(
             typer.echo(f"{mark} {kind}/{namespace}/{name} -> {resp.status_code}")
             if resp.status_code not in (200, 201):
                 failed += 1
-                detail = resp.json().get("detail", resp.text)
-                typer.echo(f"    {detail}", err=True)
+                typer.echo(f"    {_detail(resp)}", err=True)
         if failed:
             raise typer.Exit(1)
 
@@ -145,7 +163,7 @@ def get_cmd(
                 raise typer.Exit(1)
             resp = client.get(f"/v1/resources/{kind}/{namespace}/{name}")
             if resp.status_code != 200:
-                typer.echo(resp.json().get("detail", resp.text), err=True)
+                typer.echo(_detail(resp), err=True)
                 raise typer.Exit(1)
             typer.echo(json.dumps(resp.json(), indent=2, ensure_ascii=False))
             return
@@ -154,7 +172,7 @@ def get_cmd(
             params["namespace"] = namespace
         resp = client.get("/v1/resources", params=params)
         if resp.status_code != 200:
-            typer.echo(resp.json().get("detail", resp.text), err=True)
+            typer.echo(_detail(resp), err=True)
             raise typer.Exit(1)
         items = resp.json()["items"]
         rows = [
@@ -176,18 +194,21 @@ def get_cmd(
 def delete(
     kind: str,
     ref: str = typer.Argument(..., help="namespace/name"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="skip the confirmation prompt"),
 ) -> None:
     """Soft-delete a resource (re-apply restores it)."""
     namespace, _, name = ref.partition("/")
     if not namespace or not name:
         typer.echo("ref must be namespace/name", err=True)
         raise typer.Exit(1)
+    if not yes and not typer.confirm(f"Delete {kind}/{namespace}/{name}?"):
+        raise typer.Exit(1)
     with httpx.Client(base_url=_server(), headers=_headers(), timeout=30) as client:
         resp = client.delete(f"/v1/resources/{kind}/{namespace}/{name}")
         if resp.status_code == 204:
             typer.echo(f"✔ deleted {kind}/{namespace}/{name}")
         else:
-            typer.echo(resp.json().get("detail", resp.text), err=True)
+            typer.echo(_detail(resp), err=True)
             raise typer.Exit(1)
 
 
@@ -200,30 +221,51 @@ def version() -> None:
 
 _INIT_TEMPLATES: dict[str, dict] = {
     "agent": {
+        "$schema": "http://localhost:12122/v1/schema/manifest.json",
         "kind": "Agent",
         "metadata": {"name": "my-agent", "namespace": "default", "labels": {}},
-        "spec": {"image": "registry.internal/my-agent:0.1.0", "framework": "langgraph"},
+        "spec": {
+            "image": "registry.internal/my-agent:0.1.0",
+            "framework": "langgraph",
+            "protocol": "mcp",
+            "capabilities": [],
+        },
         "description": "TODO: what does this agent do",
         "tag": "v0.1.0",
     },
     "mcp-server": {
+        "$schema": "http://localhost:12122/v1/schema/manifest.json",
         "kind": "MCPServer",
         "metadata": {"name": "my-server", "namespace": "default", "labels": {}},
-        "spec": {"transport": "streamable-http", "endpoint": "http://localhost:3000/mcp"},
+        "spec": {
+            "transport": "streamable-http",
+            "endpoint": "http://localhost:3000/mcp",
+            # remote auth example:
+            # {"name": "Authorization", "value_from": {"secret_ref": {"name": "creds", "key": "token"}}}
+            "headers": [],
+        },
         "description": "TODO: tools exposed by this MCP server",
         "tag": "v0.1.0",
     },
     "skill": {
+        "$schema": "http://localhost:12122/v1/schema/manifest.json",
         "kind": "Skill",
         "metadata": {"name": "my-skill", "namespace": "default", "labels": {}},
-        "spec": {"entrypoint": "SKILL.md", "instructions": "TODO: how to use this skill"},
+        "spec": {
+            "entrypoint": "SKILL.md",
+            "instructions": "TODO: how to use this skill",
+        },
         "description": "TODO: skill summary",
         "tag": "v0.1.0",
     },
     "prompt": {
+        "$schema": "http://localhost:12122/v1/schema/manifest.json",
         "kind": "Prompt",
         "metadata": {"name": "my-prompt", "namespace": "default", "labels": {}},
-        "spec": {"template": "TODO: prompt template with {{variables}}"},
+        "spec": {
+            "template": "TODO: prompt template with {{variables}}",
+            "variables": [{"name": "variables", "description": "TODO"}],
+        },
         "description": "TODO: prompt purpose",
         "tag": "v0.1.0",
     },
@@ -274,9 +316,16 @@ def export(
             params["namespace"] = namespace
         resp = client.get("/v1/resources", params=params)
         if resp.status_code != 200:
-            typer.echo(resp.text, err=True)
+            typer.echo(_detail(resp), err=True)
             raise typer.Exit(1)
         items = resp.json()["items"]
+        total = resp.json().get("total", len(items))
+        if total > len(items):
+            typer.echo(
+                f"! {total - len(items)} resource(s) beyond the first page were "
+                "not exported; narrow with --kind/-n and re-run",
+                err=True,
+            )
         if not items:
             typer.echo("nothing to export")
             return

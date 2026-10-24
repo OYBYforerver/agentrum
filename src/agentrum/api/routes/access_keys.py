@@ -11,17 +11,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agentrum import audit
 from agentrum.auth import security
 from agentrum.auth.ak_context import AK_SCOPES
-from agentrum.auth.deps import get_current_user
+from agentrum.auth.deps import client_ip, get_current_user
+from agentrum.config import get_settings
 from agentrum.db import models
 from agentrum.db.engine import get_session
 from agentrum.services import team_service
 
 router = APIRouter()
 
+_settings = get_settings()
+
 
 class AccessKeyCreateIn(BaseModel):
     name: str
-    scopes: list[str] = ["read", "publish", "deploy"]
+    # Least privilege by default; "publish"/"deploy" must be requested
+    # explicitly and land in the audit log.
+    scopes: list[str] = ["read"]
     expires_in_days: int | None = None
 
 
@@ -72,6 +77,13 @@ async def create_access_key(
         raise HTTPException(status_code=400, detail=f"unknown scopes: {bad}")
     if not body.scopes:
         raise HTTPException(status_code=400, detail="at least one scope required")
+    if body.expires_in_days is not None and (
+        body.expires_in_days < 1 or body.expires_in_days > _settings.access_key_max_expire_days
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"expires_in_days must be 1-{_settings.access_key_max_expire_days}",
+        )
     ak, sk, sk_hash = security.new_access_key()
     row = models.AccessKey(
         project_id=team.id,
@@ -91,7 +103,7 @@ async def create_access_key(
         session, actor=user, action="access_key.create", detail={
             "team": team_name, "name": body.name, "scopes": body.scopes,
         },
-        source_ip=request.client.host if request.client else None,
+        source_ip=client_ip(request),
     )
     await session.commit()
     await session.refresh(row)
@@ -129,7 +141,11 @@ async def revoke_access_key(
 ) -> None:
     team = await team_service.get_team(session, team_name)
     await team_service.require_member(session, user, team, minimum=models.ROLE_ADMIN)
-    row = await session.get(models.AccessKey, uuid.UUID(key_id))
+    try:
+        key_uuid = uuid.UUID(key_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="access key not found") from None
+    row = await session.get(models.AccessKey, key_uuid)
     if row is None or row.project_id != team.id:
         raise HTTPException(status_code=404, detail="access key not found")
     row.revoked_at = datetime.now(UTC)
@@ -137,6 +153,6 @@ async def revoke_access_key(
         session, actor=user, action="access_key.revoke", detail={
             "team": team_name, "access_key": row.access_key,
         },
-        source_ip=request.client.host if request.client else None,
+        source_ip=client_ip(request),
     )
     await session.commit()

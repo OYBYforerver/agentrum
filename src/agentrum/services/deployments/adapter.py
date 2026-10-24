@@ -4,8 +4,14 @@ The controller is runtime-agnostic: `DeploymentAdapter` is the seam.
 `KubernetesAdapter` creates/updates a Deployment + Service in the target
 cluster namespace using kubernetes-asyncio (in-cluster config when running
 inside K8s, otherwise the local kubeconfig).
+
+Resolved secret env values are written to a dedicated Kubernetes Secret and
+injected via envFrom — the values never appear in the (world-readable)
+Deployment spec.
 """
 
+import base64
+import hashlib
 import logging
 from datetime import UTC, datetime
 from typing import Protocol
@@ -33,6 +39,29 @@ class DeploymentAdapter(Protocol):
         ...
 
 
+def _condition(ok: bool, message: str, reason: str = "Reconciled") -> dict:
+    return {
+        "type": "Ready",
+        "status": "True" if ok else "False",
+        "reason": reason,
+        "message": message,
+        "last_transition": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+
+
+def _container_name(plan_name: str) -> str:
+    """Container names cap at 63 chars; long registry names keep uniqueness
+    via a short hash instead of failing reconciliation forever."""
+    if len(plan_name) <= 63:
+        return plan_name
+    suffix = hashlib.sha1(plan_name.encode()).hexdigest()[:8]
+    return f"{plan_name[:54]}-{suffix}"
+
+
+def _secret_name(plan_name: str) -> str:
+    return f"{_container_name(plan_name)}-env"
+
+
 class KubernetesAdapter:
     """Native Kubernetes runtime (no kagent dependency)."""
 
@@ -58,6 +87,29 @@ class KubernetesAdapter:
             "app.kubernetes.io/name": plan["name"],
         }
 
+    async def _apply_env_secret(self, core, plan: DeploymentPlan) -> str | None:
+        """Write resolved env values to a dedicated K8s Secret. Returns the
+        secret name, or None when there is nothing to inject."""
+        from kubernetes_asyncio import client
+
+        env = plan.get("env") or {}
+        if not env:
+            return None
+        name = _secret_name(plan["name"])
+        body = client.V1Secret(
+            metadata=client.V1ObjectMeta(
+                name=name, namespace=plan["cluster_namespace"], labels=self._labels(plan)
+            ),
+            data={k: base64.b64encode(str(v).encode()).decode() for k, v in env.items()},
+        )
+        try:
+            await core.patch_namespaced_secret(name, plan["cluster_namespace"], body)
+        except client.exceptions.ApiException as exc:
+            if exc.status != 404:
+                raise
+            await core.create_namespaced_secret(plan["cluster_namespace"], body)
+        return name
+
     async def apply(self, plan: DeploymentPlan) -> dict:
         await self._ensure_config()
         from kubernetes_asyncio import client
@@ -66,13 +118,21 @@ class KubernetesAdapter:
         core = client.CoreV1Api()
         labels = self._labels(plan)
         selector = {"matchLabels": {"app.kubernetes.io/name": plan["name"]}}
+        container_name = _container_name(plan["name"])
+        env_secret = await self._apply_env_secret(core, plan)
         container = client.V1Container(
-            name=plan["name"],
+            name=container_name,
             image=plan["image"],
             image_pull_policy=plan.get("image_pull_policy", "IfNotPresent"),
-            env=[
-                client.V1EnvVar(name=k, value=v) for k, v in (plan.get("env") or {}).items()
-            ],
+            env_from=(
+                [
+                    client.V1EnvFromSource(
+                        secret_ref=client.V1SecretEnvSource(name=env_secret)
+                    )
+                ]
+                if env_secret
+                else None
+            ),
             ports=[client.V1ContainerPort(container_port=plan.get("port", 8000))],
         )
         pod_spec = client.V1PodSpec(
@@ -116,8 +176,31 @@ class KubernetesAdapter:
                 raise
             await core.create_namespaced_service(plan["cluster_namespace"], svc)
 
-        return self._condition(
-            True, f"applied {plan['image']} to {plan['cluster_namespace']}/{plan['name']}"
+        # Report actual rollout progress instead of a fabricated success.
+        ready = replicas = 0
+        try:
+            dep = await apps.read_namespaced_deployment(
+                plan["name"], plan["cluster_namespace"]
+            )
+            status = dep.status
+            replicas = dep.spec.replicas or 0
+            ready = min(status.ready_replicas or 0, replicas)
+        except Exception:  # noqa: BLE001 - status is best-effort
+            ready = replicas = -1
+        if ready < 0:
+            return _condition(
+                True, f"applied {plan['image']} to {plan['cluster_namespace']}/{plan['name']}",
+                reason="Applied",
+            )
+        if ready >= replicas > 0:
+            return _condition(
+                True,
+                f"applied {plan['image']} to {plan['cluster_namespace']}/{plan['name']} ({ready}/{replicas} ready)",
+            )
+        return _condition(
+            False,
+            f"rollout in progress ({max(ready, 0)}/{replicas} ready)",
+            reason="Progressing",
         )
 
     async def remove(self, plan: DeploymentPlan) -> dict:
@@ -129,31 +212,14 @@ class KubernetesAdapter:
         for delete_fn, args in (
             (apps.delete_namespaced_deployment, (plan["name"], plan["cluster_namespace"])),
             (core.delete_namespaced_service, (plan["name"], plan["cluster_namespace"])),
+            (core.delete_namespaced_secret, (_secret_name(plan["name"]), plan["cluster_namespace"])),
         ):
             try:
                 await delete_fn(*args)
             except client.exceptions.ApiException as exc:
                 if exc.status != 404:
                     raise
-        return self._condition(True, "removed from cluster")
-
-    @staticmethod
-    def _condition(ok: bool, message: str) -> dict:
-        return {
-            "type": "Ready",
-            "status": "True" if ok else "False",
-            "message": message,
-            "last_transition": datetime.now(UTC).isoformat(timespec="seconds"),
-        }
-
-
-def _condition(ok: bool, message: str) -> dict:
-    return {
-        "type": "Ready",
-        "status": "True" if ok else "False",
-        "message": message,
-        "last_transition": datetime.now(UTC).isoformat(timespec="seconds"),
-    }
+        return _condition(True, "removed from cluster", reason="Removed")
 
 
 def get_adapter(name: str = "kubernetes") -> DeploymentAdapter:

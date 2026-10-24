@@ -4,7 +4,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +14,8 @@ from agentrum.db import models
 from agentrum.schemas.specs import validate_catalog, validate_spec
 from agentrum.services import git_service, notification_service, secret_service, team_service
 
-NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+# 2-253 chars, lowercase alphanumeric + '-', no leading/trailing hyphen.
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,251}[a-z0-9]$")
 TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
 
 KIND_ALIASES = {
@@ -94,7 +95,8 @@ async def _require_delete_role(
 
 
 async def _get_resource(
-    session: AsyncSession, kind: str, namespace: str, name: str, include_deleted: bool = False
+    session: AsyncSession, kind: str, namespace: str, name: str, include_deleted: bool = False,
+    for_update: bool = False,
 ) -> models.Resource | None:
     stmt = select(models.Resource).where(
         models.Resource.kind == kind,
@@ -103,6 +105,8 @@ async def _get_resource(
     )
     if not include_deleted:
         stmt = stmt.where(models.Resource.deleted_at.is_(None))
+    if for_update:
+        stmt = stmt.with_for_update()
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
@@ -118,7 +122,16 @@ async def _subscription_grants_read(
             models.Subscription.status == models.SUB_ACTIVE,
             models.Subscription.kind == resource.kind,
             models.Subscription.namespace == resource.namespace,
-            models.Subscription.name.in_([resource.name, "*"]),
+            # Exact-name subscriptions grant the named resource; wildcard
+            # subscriptions grant INTERNAL resources only — restricted ones
+            # always need an approved, exact-name subscription.
+            or_(
+                models.Subscription.name == resource.name,
+                and_(
+                    models.Subscription.name == "*",
+                    resource.visibility == models.VISIBILITY_INTERNAL,
+                ),
+            ),
         )
         .limit(1)
     )
@@ -155,7 +168,15 @@ def _visibility_clause(actor: models.User, team_ids: list[uuid.UUID]):
             models.Subscription.status == models.SUB_ACTIVE,
             models.Subscription.kind == models.Resource.kind,
             models.Subscription.namespace == models.Resource.namespace,
-            models.Subscription.name.in_([models.Resource.name, "*"]),
+            # Mirrors _subscription_grants_read: wildcards cover internal
+            # resources only; restricted needs an approved exact-name sub.
+            or_(
+                models.Subscription.name == models.Resource.name,
+                and_(
+                    models.Subscription.name == "*",
+                    models.Resource.visibility == models.VISIBILITY_INTERNAL,
+                ),
+            ),
         )
     )
     return or_(
@@ -173,12 +194,12 @@ async def apply(
     kind = normalize_kind(kind_raw)
     if kind == "Secret":
         return await _apply_secret(session, actor, namespace, name, data, source_ip=source_ip)
+    # Authorization first: unauthorized callers never see schema details.
+    await _require_publish_role(session, actor, namespace, kind=kind)
     if not NAME_RE.match(name or ""):
         raise errors.ValidationError("resource name must be lowercase alphanumeric/'-', 2-253 chars")
     if data.tag is not None and not TAG_RE.match(data.tag):
         raise errors.ValidationError("tag must be 1-63 chars of letters, digits, '.', '_' or '-'")
-    # Authorization first: unauthorized callers never see schema details.
-    await _require_publish_role(session, actor, namespace, kind=kind)
     spec = validate_spec(kind, data.spec)
 
     # Prompts are project-private: visibility is forced, cross-project sharing
@@ -187,11 +208,17 @@ async def apply(
         data.visibility = models.VISIBILITY_PRIVATE
 
     # Git-backed skills: resolve the ref to a commit SHA at publish time so
-    # the immutable version pins exact upstream content. Failure blocks publish.
+    # the immutable version pins exact upstream content, and snapshot the
+    # entrypoint (frontmatter parsed) so the version is self-contained.
+    # Failure blocks publish.
     if kind == "Skill" and (spec.get("source") or {}).get("git"):
-        spec["source"]["git"] = await git_service.resolve_git_source(
+        spec["source"]["git"] = resolved_git = await git_service.resolve_git_source(
             session, namespace, spec["source"]["git"]
         )
+        snapshot = await git_service.snapshot_skill_entrypoint(
+            session, namespace, resolved_git, name, entrypoint=spec.get("entrypoint")
+        )
+        spec["entrypoint_snapshot"] = snapshot
 
     if kind == "Deployment":
         target = await _get_resource(
@@ -202,9 +229,18 @@ async def apply(
                 f"deployment target {spec['target_kind']}/{spec['target_namespace']}/"
                 f"{spec['target_name']} not found"
             )
+        # Publishing a Deployment is not a licence to reference anything: the
+        # publisher must be able to read the target (no reaching into other
+        # projects' private/restricted resources via the reconciler).
+        await _assert_can_read(session, actor, target)
 
     now = datetime.now(UTC)
-    resource = await _get_resource(session, kind, namespace, name, include_deleted=True)
+    # Lock the existing row so concurrent publishes of the same resource
+    # serialize: version numbers stay dense and metadata updates cannot be
+    # silently rolled back by a version conflict.
+    resource = await _get_resource(
+        session, kind, namespace, name, include_deleted=True, for_update=True
+    )
     created = resource is None
 
     try:
@@ -295,37 +331,42 @@ async def _apply_secret(
         raise errors.ValidationError("Secret spec must be {\"data\": {<key>: <value>}}")
     if any(not isinstance(k, str) or not isinstance(v, str) for k, v in payload.items()):
         raise errors.ValidationError("Secret data keys and values must be strings")
+    await _require_publish_role(session, actor, namespace)
     if not NAME_RE.match(name or ""):
         raise errors.ValidationError("resource name must be lowercase alphanumeric/'-', 2-253 chars")
-    await _require_publish_role(session, actor, namespace)
 
-    resource = await _get_resource(session, "Secret", namespace, name, include_deleted=True)
-    created = resource is None
-    if created:
-        resource = models.Resource(
-            kind="Secret",
-            namespace=namespace,
-            name=name,
-            visibility=data.visibility or models.VISIBILITY_RESTRICTED,
-            labels=data.labels or {},
-            description=data.description,
-            created_by=actor.id,
-        )
-        session.add(resource)
-        await session.flush()
-    else:
-        resource.deleted_at = None
-        if data.visibility is not None:
-            resource.visibility = data.visibility
-        if data.description is not None:
-            resource.description = data.description
-
-    await secret_service.set_payloads(session, resource.id, payload)
-    await audit.record(
-        session, actor=actor, action="secret.set", kind="Secret", namespace=namespace,
-        name=name, detail={"keys": sorted(payload)}, source_ip=source_ip,
+    resource = await _get_resource(
+        session, "Secret", namespace, name, include_deleted=True, for_update=True
     )
-    await session.commit()
+    created = resource is None
+    try:
+        if created:
+            resource = models.Resource(
+                kind="Secret",
+                namespace=namespace,
+                name=name,
+                # Secrets are always restricted: exposure defeats the point.
+                visibility=models.VISIBILITY_RESTRICTED,
+                labels=data.labels or {},
+                description=data.description,
+                created_by=actor.id,
+            )
+            session.add(resource)
+            await session.flush()
+        else:
+            resource.deleted_at = None
+            if data.description is not None:
+                resource.description = data.description
+
+        await secret_service.set_payloads(session, resource.id, payload)
+        await audit.record(
+            session, actor=actor, action="secret.set", kind="Secret", namespace=namespace,
+            name=name, detail={"keys": sorted(payload)}, source_ip=source_ip,
+        )
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise errors.ConflictError("concurrent modification, please retry") from exc
     await session.refresh(resource)
     return resource, None, created
 
@@ -349,7 +390,10 @@ async def list_resources(
     if namespace:
         stmt = stmt.where(models.Resource.namespace == namespace)
     if q:
-        pattern = f"%{q}%"
+        # Escape LIKE wildcards so a search for "%" or "_" cannot scan the
+        # whole catalog.
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
         stmt = stmt.where(
             or_(models.Resource.name.ilike(pattern), models.Resource.description.ilike(pattern))
         )
@@ -365,19 +409,28 @@ async def list_resources(
         )
     ).scalars().all()
 
-    latest: dict[uuid.UUID, models.ResourceVersion] = {}
-    if resources:
-        ids = [r.id for r in resources]
-        rows = (
-            await session.execute(
-                select(models.ResourceVersion)
-                .where(models.ResourceVersion.resource_id.in_(ids))
-                .order_by(models.ResourceVersion.version.desc())
-            )
-        ).scalars().all()
-        for rv in rows:
-            latest.setdefault(rv.resource_id, rv)
+    latest = await latest_versions(session, [r.id for r in resources])
     return list(resources), latest, total
+
+
+async def latest_versions(
+    session: AsyncSession, resource_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, models.ResourceVersion]:
+    """One row per resource: its newest version (DISTINCT ON instead of
+    loading every historical version's full spec into Python)."""
+    if not resource_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(models.ResourceVersion)
+            .where(models.ResourceVersion.resource_id.in_(resource_ids))
+            .distinct(models.ResourceVersion.resource_id)
+            .order_by(
+                models.ResourceVersion.resource_id, models.ResourceVersion.version.desc()
+            )
+        )
+    ).scalars().all()
+    return {rv.resource_id: rv for rv in rows}
 
 
 async def get_resource(
@@ -390,6 +443,8 @@ async def get_resource(
         raise errors.NotFoundError(f"{kind.lower()}/{namespace}/{name} not found")
     await _assert_can_read(session, actor, resource)
 
+    if tag is not None and version is not None:
+        raise errors.ValidationError("pass either tag or version, not both")
     stmt = select(models.ResourceVersion).where(models.ResourceVersion.resource_id == resource.id)
     if tag is not None:
         stmt = stmt.where(models.ResourceVersion.tag == tag)

@@ -1,19 +1,22 @@
 """User management (platform admin only in the MVP)."""
 
+import re
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentrum import audit
 from agentrum.auth import security
-from agentrum.auth.deps import require_platform_admin
+from agentrum.auth.deps import client_ip, require_platform_admin
 from agentrum.db import models
 from agentrum.db.engine import get_session
 
 router = APIRouter()
+
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$")
 
 
 class UserCreateIn(BaseModel):
@@ -40,11 +43,15 @@ class UserOut(BaseModel):
 @router.post("", response_model=UserOut, status_code=201)
 async def create_user(
     body: UserCreateIn,
+    request: Request,
     _admin: models.User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
 ) -> UserOut:
-    if not body.username or len(body.username) > 63:
-        raise HTTPException(status_code=400, detail="username must be 1-63 chars")
+    if not _USERNAME_RE.match(body.username or ""):
+        raise HTTPException(
+            status_code=400,
+            detail="username must be 1-63 chars of letters, digits, '.', '_' or '-'",
+        )
     if len(body.password) < 8:
         raise HTTPException(status_code=400, detail="password must be at least 8 chars")
     dup = (
@@ -58,6 +65,10 @@ async def create_user(
         display_name=body.display_name,
     )
     session.add(user)
+    await audit.record(
+        session, actor=_admin, action="user.create",
+        detail={"user": body.username}, source_ip=client_ip(request),
+    )
     await session.commit()
     await session.refresh(user)
     return UserOut(
@@ -84,10 +95,33 @@ async def patch_user(
     if user.id == admin.id and body.disabled is True:
         raise HTTPException(status_code=400, detail="cannot disable your own account")
 
+    # Keep at least one enabled platform admin: removing the flag from, or
+    # disabling, the last one would lock the management plane.
+    loses_admin = (
+        (body.is_platform_admin is False and user.is_platform_admin)
+        or (body.disabled is True and user.is_platform_admin)
+    )
+    if loses_admin:
+        other_admins = (
+            await session.execute(
+                select(func.count())
+                .select_from(models.User)
+                .where(
+                    models.User.is_platform_admin.is_(True),
+                    models.User.disabled_at.is_(None),
+                    models.User.id != user.id,
+                )
+            )
+        ).scalar_one()
+        if other_admins == 0:
+            raise HTTPException(status_code=400, detail="cannot demote or disable the last platform admin")
+
     if body.new_password is not None:
         if len(body.new_password) < 8:
             raise HTTPException(status_code=400, detail="password must be at least 8 chars")
         user.password_hash = security.hash_password(body.new_password)
+        # An admin reset must cut off sessions issued before the reset.
+        user.password_changed_at = datetime.now(UTC)
     if body.display_name is not None:
         user.display_name = body.display_name
     if body.is_platform_admin is not None:

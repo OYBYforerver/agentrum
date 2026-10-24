@@ -6,6 +6,59 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agentrum.db import models
 
 
+def _wants_published(sub: models.Subscription) -> bool:
+    """Honor the subscriber's declared events. "new_version" is the legacy
+    name of "resource.published" (rows created before events were honored)."""
+    events = sub.events or ["new_version"]
+    return "resource.published" in events or "new_version" in events
+
+
+def _wants_deleted(sub: models.Subscription) -> bool:
+    return "resource.deleted" in (sub.events or [])
+
+
+async def enqueue_resource_deprecated(
+    session: AsyncSession, resource: models.Resource, actor_name: str,
+    reason: str | None, successor: str | None,
+) -> int:
+    """Queue a `resource.deprecated` notice for every active subscriber.
+
+    Unlike published/deleted, deprecation ignores the subscriber's `events`
+    preference: it is an impact warning about content they already consume,
+    not a catalog event they opted into."""
+    rows = (
+        await session.execute(
+            select(models.Subscription, models.Team.name)
+            .join(models.Team, models.Team.id == models.Subscription.subscriber_team_id)
+            .where(
+                models.Subscription.kind == resource.kind,
+                models.Subscription.namespace == resource.namespace,
+                models.Subscription.status == models.SUB_ACTIVE,
+                models.Subscription.name.in_([resource.name, "*"]),
+            )
+        )
+    ).all()
+    queued = 0
+    for sub, team_name in rows:
+        session.add(
+            models.NotificationOutbox(
+                event_type="resource.deprecated",
+                payload={
+                    "event": "resource.deprecated",
+                    "kind": resource.kind,
+                    "namespace": resource.namespace,
+                    "name": resource.name,
+                    "subscriber_team": team_name,
+                    "deprecated_by": actor_name,
+                    "reason": reason,
+                    "successor": successor,
+                },
+            )
+        )
+        queued += 1
+    return queued
+
+
 async def enqueue_resource_published(
     session: AsyncSession, resource: models.Resource, version: models.ResourceVersion,
     publisher_name: str,
@@ -26,7 +79,10 @@ async def enqueue_resource_published(
         )
     ).all()
 
+    queued = 0
     for sub, team_name in rows:
+        if not _wants_published(sub):
+            continue
         session.add(
             models.NotificationOutbox(
                 event_type="resource.published",
@@ -43,7 +99,8 @@ async def enqueue_resource_published(
                 },
             )
         )
-    return len(rows)
+        queued += 1
+    return queued
 
 
 async def enqueue_resource_deleted(
@@ -63,7 +120,10 @@ async def enqueue_resource_deleted(
             )
         )
     ).all()
+    queued = 0
     for sub, team_name in rows:
+        if not _wants_deleted(sub):
+            continue
         session.add(
             models.NotificationOutbox(
                 event_type="resource.deleted",
@@ -77,7 +137,8 @@ async def enqueue_resource_deleted(
                 },
             )
         )
-    return len(rows)
+        queued += 1
+    return queued
 
 
 async def list_consumers(

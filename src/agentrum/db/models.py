@@ -15,6 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -27,7 +28,7 @@ ROLE_ADMIN = "admin"
 ROLE_PUBLISHER = "publisher"
 ROLE_DEVELOPER = "developer"
 ROLE_MEMBER = "member"
-ROLES = (ROLE_ADMIN, ROLE_PUBLISHER, ROLE_MEMBER)
+ROLES = (ROLE_ADMIN, ROLE_PUBLISHER, ROLE_DEVELOPER, ROLE_MEMBER)
 
 VISIBILITY_INTERNAL = "internal"
 VISIBILITY_RESTRICTED = "restricted"
@@ -47,6 +48,15 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        Index(
+            "ix_users_idp_provider_subject",
+            "idp_provider",
+            "idp_subject",
+            unique=True,
+            postgresql_where=text("idp_subject IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username: Mapped[str] = mapped_column(String(63), unique=True)
@@ -54,6 +64,9 @@ class User(Base):
     display_name: Mapped[str | None] = mapped_column(String(255))
     is_platform_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Session-invalidation marker: tokens issued before this instant are
+    # rejected, so changing/resetting the password revokes every session.
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Identity-provider link (OIDC / OAuth2 SSO). NULL for local accounts.
     idp_provider: Mapped[str | None] = mapped_column(String(63))
     idp_subject: Mapped[str | None] = mapped_column(String(255))
@@ -139,6 +152,20 @@ class Resource(Base):
     __table_args__ = (
         UniqueConstraint("kind", "namespace", "name", name="uq_resource_identity"),
         Index("ix_resources_kind_namespace", "kind", "namespace"),
+        # Trigram acceleration for catalog search (created in migration 0003
+        # together with the pg_trgm extension).
+        Index(
+            "ix_resources_name_trgm",
+            "name",
+            postgresql_using="gin",
+            postgresql_ops={"name": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_resources_desc_trgm",
+            "description",
+            postgresql_using="gin",
+            postgresql_ops={"description": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -153,6 +180,9 @@ class Resource(Base):
     catalog: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     # Runtime observations (conditions written by probes / controllers).
     status: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    # End-of-life marker ({"at", "by", "reason", "successor"}): the resource
+    # stays visible and consumable, subscribers are warned.
+    deprecation: Mapped[dict | None] = mapped_column(JSONB)
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -192,9 +222,10 @@ class ResourceVersion(Base):
 class Subscription(Base):
     """Team B follows Team A's content.
 
-    `name` may be "*" to subscribe to a whole namespace. For restricted
-    resources the subscription starts as `pending_approval` until an admin of
-    the owning team approves it.
+    `name` may be "*" to subscribe to a whole namespace, but a wildcard
+    subscription only ever grants INTERNAL resources — restricted resources
+    always require an exact-name subscription approved by an admin of the
+    owning team.
     """
 
     __tablename__ = "subscriptions"
@@ -292,7 +323,7 @@ class AccessKey(Base):
     access_key: Mapped[str] = mapped_column(String(63), unique=True)
     secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    scopes: Mapped[list] = mapped_column(JSONB, nullable=False, server_default='["read","publish","deploy"]')
+    scopes: Mapped[list] = mapped_column(JSONB, nullable=False, server_default='["read"]')
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

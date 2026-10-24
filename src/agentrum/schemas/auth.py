@@ -18,6 +18,8 @@ class TokenOut(BaseModel):
 
 class ApiTokenCreateIn(BaseModel):
     name: str
+    # None → server default (config: api_token_default_expire_days).
+    expires_in_days: int | None = None
 
 
 class ApiTokenOut(BaseModel):

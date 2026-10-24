@@ -2,11 +2,25 @@
 must satisfy the minimal contract of their kind — a registry is only
 trustworthy if its entries are well-formed."""
 
+import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, HttpUrl, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, model_validator
 
 from agentrum import errors
+
+# DNS-1123 label: what a Kubernetes namespace name must look like.
+_CLUSTER_NAMESPACE_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
+# Namespaces a workload registry has no business creating workloads in.
+_RESERVED_CLUSTER_NAMESPACES = {"kube-system", "kube-public", "kube-node-lease"}
+# Container image reference (repo[:port]/path[:tag][@digest]) — permissive but
+# rejects schemes ("https://...") and whitespace, which are never valid.
+_IMAGE_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._/-]*(:[0-9]+)?(/[A-Za-z0-9._/-]+)?"
+    r"(:[A-Za-z0-9._-]+)?(@[A-Za-z0-9+.-]+(:[A-Fa-f0-9]+)?)?$"
+)
+# {{variable}} placeholders in Prompt templates (whitespace-tolerant).
+_TEMPLATE_PLACEHOLDERS_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 
 class BaseSpec(BaseModel):
@@ -38,15 +52,45 @@ class EnvVar(BaseSpec):
 
 
 class AgentSpec(BaseSpec):
+    """Container image plus the protocol metadata a catalog consumer needs.
+
+    `env` describes what the process needs regardless of where it runs;
+    cluster placement (namespace/replicas) belongs to the Deployment spec."""
+
     image: str
     env: list[EnvVar] = []
+    # Catalog/interop metadata (all optional — the image is the contract).
+    framework: str | None = None  # langgraph / crewai / adk / ...
+    protocol: Literal["mcp", "a2a", "openapi", "http", "custom"] | None = None
+    # A2A agent card (/.well-known/agent.json) when the agent speaks A2A.
+    agent_card_url: HttpUrl | None = None
+    capabilities: list[str] = []
+
+    @model_validator(mode="after")
+    def _sane_image(self) -> "AgentSpec":
+        if "://" in self.image or any(c.isspace() for c in self.image) or not _IMAGE_RE.match(self.image):
+            raise ValueError(
+                f"image {self.image!r} is not a valid container image reference"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _a2a_needs_card(self) -> "AgentSpec":
+        if self.protocol == "a2a" and not self.agent_card_url:
+            raise ValueError("protocol 'a2a' requires agent_card_url")
+        return self
 
 
 class MCPServerSpec(BaseSpec):
     transport: Literal["streamable-http", "sse", "stdio"]
     endpoint: HttpUrl | None = None
     command: str | None = None
+    args: list[str] = []  # stdio launch arguments (npx -y ..., python -m ...)
     env: list[EnvVar] = []
+    # Remote auth/routing headers. Literal values are published to consumers
+    # in connection snippets; value_from.secret_ref entries stay secret (they
+    # are resolved server-side for health probes only).
+    headers: list[EnvVar] = []
 
     @model_validator(mode="after")
     def _check_transport_target(self) -> "MCPServerSpec":
@@ -54,6 +98,8 @@ class MCPServerSpec(BaseSpec):
             raise ValueError(f"endpoint is required for transport {self.transport!r}")
         if self.transport == "stdio" and not self.command:
             raise ValueError("command is required for transport 'stdio'")
+        if self.transport != "stdio" and self.args:
+            raise ValueError("args are only valid for transport 'stdio'")
         return self
 
 
@@ -105,6 +151,18 @@ class PromptSpec(BaseSpec):
         dupes = {n for n in names if names.count(n) > 1}
         if dupes:
             raise ValueError(f"duplicate variable names: {sorted(dupes)}")
+        declared = set(names)
+        used = set(_TEMPLATE_PLACEHOLDERS_RE.findall(self.template))
+        undeclared = sorted(used - declared)
+        unused = sorted(declared - used)
+        if undeclared:
+            raise ValueError(
+                f"template uses {undeclared} but they are not declared in variables"
+            )
+        if unused:
+            raise ValueError(
+                f"variables {unused} are declared but never used in the template"
+            )
         return self
 
 
@@ -114,12 +172,24 @@ class DeploymentSpec(BaseSpec):
     target_kind: Literal["Agent", "MCPServer"]
     target_namespace: str
     target_name: str
-    tag: str | None = None  # pin a version tag; default = latest
+    tag: str | None = Field(default=None, max_length=63)  # pin a version tag; default = latest
     cluster_namespace: str = "default"
-    replicas: int = 1
+    replicas: int = Field(default=1, ge=1, le=50)
     runtime: Literal["kubernetes"] = "kubernetes"
     image_pull_policy: Literal["IfNotPresent", "Always", "Never"] = "IfNotPresent"
-    port: int = 8000
+    port: int = Field(default=8000, ge=1, le=65535)
+
+    @model_validator(mode="after")
+    def _sane_cluster_namespace(self) -> "DeploymentSpec":
+        if not _CLUSTER_NAMESPACE_RE.match(self.cluster_namespace):
+            raise ValueError(
+                "cluster_namespace must be a DNS-1123 label (lowercase alphanumeric/'-', 1-63 chars)"
+            )
+        if self.cluster_namespace in _RESERVED_CLUSTER_NAMESPACES:
+            raise ValueError(
+                f"cluster_namespace {self.cluster_namespace!r} is a reserved Kubernetes namespace"
+            )
+        return self
 
 
 class CatalogInfo(BaseModel):
@@ -147,6 +217,12 @@ SPEC_MODELS: dict[str, type[BaseSpec]] = {
 }
 
 
+# Bump when a spec shape changes meaningfully. Stored inside every published
+# version so consumers (and future migrations) can tell shapes apart; specs
+# published before this field existed are implicitly version 1.
+SPEC_VERSION = 1
+
+
 def validate_spec(kind: str, spec: Any) -> dict:
     """Validate `spec` against its kind. Returns the normalized dict for
     storage; raises ValidationError (domain) on failure.
@@ -166,7 +242,9 @@ def validate_spec(kind: str, spec: Any) -> dict:
         first = exc.errors()[0]
         loc = ".".join(str(p) for p in first.get("loc", []))
         raise errors.ValidationError(f"invalid {kind} spec at '{loc}': {first['msg']}") from exc
-    return parsed.model_dump(mode="json")
+    dump = parsed.model_dump(mode="json")
+    dump["spec_version"] = SPEC_VERSION
+    return dump
 
 
 def validate_catalog(catalog: Any) -> dict:

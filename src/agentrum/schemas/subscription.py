@@ -1,13 +1,18 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
+
+# Legacy "new_version" is kept for compatibility with already-created
+# subscriptions; "resource.published" is its canonical name.
+SubscriptionEvent = Literal["new_version", "resource.published", "resource.deleted"]
 
 
 class SubscriptionCreateIn(BaseModel):
     kind: str
     namespace: str
-    name: str = "*"  # "*" subscribes to the whole namespace catalog
-    events: list[str] = ["new_version"]
+    name: str = "*"  # "*" subscribes to the whole namespace catalog (INTERNAL resources only)
+    events: list[SubscriptionEvent] = ["new_version"]
 
 
 class SubscriptionOut(BaseModel):

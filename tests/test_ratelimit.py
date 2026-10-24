@@ -1,4 +1,9 @@
-from agentrum.auth.ratelimit import FailureLockout, SlidingWindowLimiter
+from agentrum.auth.ratelimit import (
+    _GC_EVERY,
+    _MAX_TRACKED_KEYS,
+    FailureLockout,
+    SlidingWindowLimiter,
+)
 
 
 def test_sliding_window_blocks_after_max():
@@ -27,3 +32,20 @@ def test_lockout_after_threshold_and_reset_on_success():
     assert lock.is_locked("u") > 0
     lock.reset("u")
     assert lock.is_locked("u") == 0
+
+
+def test_sliding_window_memory_is_bounded():
+    """Spraying random keys must not grow the table without bound (the GC
+    runs every _GC_EVERY calls, so allow one GC interval of slack)."""
+    limiter = SlidingWindowLimiter(max_events=1000, window_seconds=60)
+    for i in range(_MAX_TRACKED_KEYS + 2000):
+        limiter.allow(f"key-{i}")
+    assert len(limiter._events) <= _MAX_TRACKED_KEYS + _GC_EVERY
+
+
+def test_lockout_memory_is_bounded():
+    lock = FailureLockout(threshold=10_000, window_seconds=60, lock_seconds=1)
+    for i in range(_MAX_TRACKED_KEYS + 2000):
+        lock.record_failure(f"user-{i}")
+    assert len(lock._failures) <= _MAX_TRACKED_KEYS + _GC_EVERY
+    assert len(lock._locked_until) <= _MAX_TRACKED_KEYS + _GC_EVERY

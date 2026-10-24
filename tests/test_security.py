@@ -15,7 +15,24 @@ def test_password_hash_roundtrip():
 def test_access_token_roundtrip():
     user_id = uuid.uuid4()
     token = security.create_access_token(user_id)
-    assert security.decode_access_token(token) == user_id
+    decoded_user, issued_at = security.decode_access_token(token)
+    assert decoded_user == user_id
+    assert issued_at is not None
+
+
+def test_access_token_rejects_foreign_token_type():
+    """OIDC state JWTs share the signing key; they must not authenticate."""
+    import jwt as pyjwt
+
+    from agentrum.config import get_settings
+
+    state_token = pyjwt.encode(
+        {"p": "x", "n": "y", "exp": 99999999999},
+        get_settings().secret_key,
+        algorithm="HS256",
+    )
+    with pytest.raises(ValueError):
+        security.decode_access_token(state_token)
 
 
 def test_access_token_invalid():

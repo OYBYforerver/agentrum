@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentrum import errors
-from agentrum.auth.deps import get_current_user
+from agentrum.auth.deps import client_ip, get_current_user
 from agentrum.db import models
 from agentrum.db.engine import get_session
 from agentrum.schemas.team import MemberAddIn, MemberOut, MemberUpdateIn, TeamCreateIn, TeamOut
@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
+    return client_ip(request)
 
 
 @router.post("", response_model=TeamOut, status_code=201)
@@ -193,9 +193,12 @@ async def transfer_ownership(
     await team_service.transfer_ownership(
         session, user, team, new_owner, source_ip=_client_ip(request)
     )
+    # The previous owner was demoted by the transfer — report the real role,
+    # not the one the caller had before.
+    role = await team_service.get_team_role(session, user.id, team.id)
     return TeamOut(
         id=str(team.id), name=team.name, display_name=team.display_name,
-        description=team.description, my_role="admin",
+        description=team.description, my_role=role,
     )
 
 
@@ -264,35 +267,3 @@ async def list_consumers(
         }
         for subscriber, sub in rows
     ]
-
-
-# Errors are surfaced as machine-readable {code, detail} envelopes here to
-# keep routers thin. Codes are stable identifiers for CLI/UI localization.
-def install_error_handlers(app) -> None:  # pragma: no cover
-    from fastapi.exceptions import RequestValidationError
-    from fastapi.responses import JSONResponse
-    from starlette.exceptions import HTTPException as StarletteHTTPException
-
-    @app.exception_handler(errors.AgentrumError)
-    async def _domain(request: Request, exc: errors.AgentrumError):
-        return JSONResponse(
-            status_code=exc.status,
-            content={"code": exc.code, "detail": exc.detail, **exc.context},
-        )
-
-    @app.exception_handler(StarletteHTTPException)
-    async def _http(request: Request, exc: StarletteHTTPException):
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"code": f"http_{exc.status_code}", "detail": str(exc.detail)},
-            headers=getattr(exc, "headers", None),
-        )
-
-    @app.exception_handler(RequestValidationError)
-    async def _validation(request: Request, exc: RequestValidationError):
-        first = exc.errors()[0] if exc.errors() else {}
-        loc = ".".join(str(p) for p in first.get("loc", []))
-        return JSONResponse(
-            status_code=422,
-            content={"code": "invalid_request", "detail": f"{loc}: {first.get('msg', 'invalid')}"},
-        )

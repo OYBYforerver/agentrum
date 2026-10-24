@@ -14,7 +14,11 @@ from agentrum.db import models
 from agentrum.db.engine import SessionLocal
 from agentrum.services import secret_service
 from agentrum.services.deployments.adapter import DeploymentAdapter, DeploymentPlan, get_adapter
-from agentrum.services.deployments.allowlist import image_allowed, parse_allowlist
+from agentrum.services.deployments.allowlist import (
+    image_allowed,
+    parse_allowlist,
+    warn_if_permissive,
+)
 
 logger = logging.getLogger("agentrum.deploy")
 
@@ -29,20 +33,15 @@ def _condition(ok: bool, message: str, reason: str = "Reconciled") -> dict:
     }
 
 
-async def _latest_versions(session, ids: list) -> dict:
-    if not ids:
-        return {}
-    rows = (
-        await session.execute(
-            select(models.ResourceVersion)
-            .where(models.ResourceVersion.resource_id.in_(ids))
-            .order_by(models.ResourceVersion.version.desc())
-        )
-    ).scalars().all()
-    latest: dict = {}
-    for rv in rows:
-        latest.setdefault(rv.resource_id, rv)
-    return latest
+def _conditions_equal(a: dict | None, b: dict | None) -> bool:
+    """Condition comparison that ignores the timestamp, so an unchanged state
+    does not rewrite the row (and updated_at) every tick."""
+    if a is None or b is None:
+        return a is b
+    a, b = dict(a), dict(b)
+    a.pop("last_transition", None)
+    b.pop("last_transition", None)
+    return a == b
 
 
 async def _tagged_version(session, resource_id, tag: str) -> models.ResourceVersion | None:
@@ -65,14 +64,16 @@ async def reconcile_tick(session, adapter: DeploymentAdapter) -> int:
         await session.execute(
             select(models.Resource)
             .where(models.Resource.kind == "Deployment")
+            .order_by(models.Resource.id)  # deterministic: no starvation
             .limit(100)
         )
     ).scalars().all()
     if not rows:
         return 0
-    latest = await _latest_versions(session, [r.id for r in rows])
 
-    from agentrum.services.resource_service import _get_resource
+    from agentrum.services.resource_service import _get_resource, latest_versions
+
+    latest = await latest_versions(session, [r.id for r in rows])
 
     actions = 0
     for row in rows:
@@ -80,59 +81,85 @@ async def reconcile_tick(session, adapter: DeploymentAdapter) -> int:
         if rv is None:
             continue
         spec = rv.spec or {}
+        status = dict(row.status or {})
         condition: dict | None = None
 
         if row.deleted_at is not None:
+            if status.get("removed"):
+                continue  # terminal state: cluster is clean, nothing more to do
             plan = _plan_from(row, spec, image="", env={})
             try:
                 condition = await adapter.remove(plan)
+                status["removed"] = True
             except Exception as exc:  # noqa: BLE001 - surface adapter failures as conditions
-                condition = _condition(False, f"adapter error: {exc}", reason="AdapterError")
+                logger.warning("remove failed for %s/%s: %s", row.namespace, row.name, exc)
+                condition = _condition(False, "adapter failed to remove the workload", reason="AdapterError")
             actions += 1
         else:
-            target = await _get_resource(
-                session, spec["target_kind"], spec["target_namespace"], spec["target_name"]
-            )
-            if target is None:
-                condition = _condition(False, "deployment target not found", reason="TargetMissing")
-            else:
-                image_rv = (
-                    await _tagged_version(session, target.id, spec["tag"])
-                    if spec.get("tag")
-                    else (await _latest_versions(session, [target.id])).get(target.id)
+            target_kind = spec.get("target_kind")
+            target_namespace = spec.get("target_namespace")
+            target_name = spec.get("target_name")
+            if not (target_kind and target_namespace and target_name):
+                condition = _condition(
+                    False, "deployment spec is missing its target reference", reason="InvalidSpec"
                 )
-                image = (image_rv.spec or {}).get("image") if image_rv else None
-                if not image:
-                    condition = _condition(
-                        False, "target resource has no image to run", reason="NoImage"
-                    )
-                elif not image_allowed(image, allowlist):
-                    condition = _condition(
-                        False,
-                        f"image {image!r} rejected by ARK_IMAGE_ALLOWLIST",
-                        reason="ImageNotAllowed",
-                    )
+            else:
+                target = await _get_resource(session, target_kind, target_namespace, target_name)
+                if target is None:
+                    condition = _condition(False, "deployment target not found", reason="TargetMissing")
                 else:
-                    try:
-                        env = await secret_service.resolve_env(
-                            session,
-                            (image_rv.spec or {}).get("env") or [],
-                            default_namespace=spec["target_namespace"],
+                    image_rv = (
+                        await _tagged_version(session, target.id, spec["tag"])
+                        if spec.get("tag")
+                        else (await latest_versions(session, [target.id])).get(target.id)
+                    )
+                    image = (image_rv.spec or {}).get("image") if image_rv else None
+                    if not image:
+                        condition = _condition(
+                            False, "target resource has no image to run", reason="NoImage"
                         )
-                    except Exception as exc:  # noqa: BLE001 - unresolvable refs surface as conditions
-                        condition = _condition(False, str(exc), reason="EnvResolutionFailed")
+                    elif not image_allowed(image, allowlist):
+                        condition = _condition(
+                            False,
+                            f"image {image!r} rejected by ARK_IMAGE_ALLOWLIST",
+                            reason="ImageNotAllowed",
+                        )
                     else:
-                        plan = _plan_from(row, spec, image=image, env=env)
                         try:
-                            condition = await adapter.apply(plan)
-                        except Exception as exc:  # noqa: BLE001 - surfaced as a condition
-                            condition = _condition(
-                                False, f"adapter error: {exc}", reason="AdapterError"
+                            env = await secret_service.resolve_env(
+                                session,
+                                (image_rv.spec or {}).get("env") or [],
+                                default_namespace=target_namespace,
                             )
-                        actions += 1
+                        except Exception as exc:  # noqa: BLE001
+                            # The raw error may name other namespaces' secrets;
+                            # keep it server-side, publish a stable message.
+                            logger.warning(
+                                "env resolution failed for %s/%s: %s", row.namespace, row.name, exc
+                            )
+                            condition = _condition(
+                                False,
+                                "environment could not be resolved (check secretRefs)",
+                                reason="EnvResolutionFailed",
+                            )
+                        else:
+                            plan = _plan_from(row, spec, image=image, env=env)
+                            try:
+                                condition = await adapter.apply(plan)
+                            except Exception as exc:  # noqa: BLE001
+                                logger.warning(
+                                    "apply failed for %s/%s: %s", row.namespace, row.name, exc
+                                )
+                                condition = _condition(
+                                    False, "adapter failed to apply the workload", reason="AdapterError"
+                                )
+                            actions += 1
 
-        if condition and (row.status or {}).get("conditions") != [condition]:
-            row.status = {"conditions": [condition]}
+        if condition and not _conditions_equal(
+            (row.status or {}).get("conditions", [None])[0], condition
+        ):
+            status["conditions"] = [condition]
+            row.status = status
     await session.commit()
     return actions
 
@@ -152,6 +179,7 @@ def _plan_from(row: models.Resource, spec: dict, image: str, env: dict) -> Deplo
 async def run_forever(adapter: DeploymentAdapter | None = None) -> None:  # pragma: no cover
     adapter = adapter or get_adapter("kubernetes")
     interval = get_settings().deploy_interval_seconds
+    warn_if_permissive(parse_allowlist(get_settings().image_allowlist))
     logger.info("deployment controller started (interval=%ss)", interval)
     while True:
         try:
@@ -161,7 +189,7 @@ async def run_forever(adapter: DeploymentAdapter | None = None) -> None:  # prag
                     logger.info("reconciled %s deployment(s)", n)
         except Exception:
             logger.exception("deployment reconcile tick failed")
-        await asyncio.sleep(interval)
+        await asyncio.sleep(max(interval, 1))
 
 
 def start_controller(adapter: DeploymentAdapter | None = None) -> asyncio.Task:

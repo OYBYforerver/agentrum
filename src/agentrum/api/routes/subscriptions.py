@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agentrum.auth.deps import get_current_user
+from agentrum import errors
+from agentrum.auth.deps import client_ip, get_current_user
 from agentrum.db import models
 from agentrum.db.engine import get_session
 from agentrum.schemas.subscription import (
@@ -18,7 +19,14 @@ router = APIRouter()
 
 
 def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
+    return client_ip(request)
+
+
+def _uuid_or_404(raw: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(raw)
+    except ValueError:
+        raise errors.NotFoundError("subscription not found") from None
 
 
 async def _serialize(session: AsyncSession, subs: list[models.Subscription]) -> list[SubscriptionOut]:
@@ -90,7 +98,7 @@ async def approve_subscription(
     session: AsyncSession = Depends(get_session),
 ) -> SubscriptionOut:
     sub = await subscription_service.approve(
-        session, user, uuid.UUID(sub_id), approved=True, source_ip=_client_ip(request)
+        session, user, _uuid_or_404(sub_id), approved=True, source_ip=_client_ip(request)
     )
     return (await _serialize(session, [sub]))[0]
 
@@ -103,7 +111,7 @@ async def reject_subscription(
     session: AsyncSession = Depends(get_session),
 ) -> SubscriptionOut:
     sub = await subscription_service.approve(
-        session, user, uuid.UUID(sub_id), approved=False, source_ip=_client_ip(request)
+        session, user, _uuid_or_404(sub_id), approved=False, source_ip=_client_ip(request)
     )
     return (await _serialize(session, [sub]))[0]
 
@@ -116,6 +124,6 @@ async def revoke_subscription(
     session: AsyncSession = Depends(get_session),
 ) -> SubscriptionOut:
     sub = await subscription_service.revoke(
-        session, user, uuid.UUID(sub_id), source_ip=_client_ip(request)
+        session, user, _uuid_or_404(sub_id), source_ip=_client_ip(request)
     )
     return (await _serialize(session, [sub]))[0]

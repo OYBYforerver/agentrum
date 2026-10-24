@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentrum import audit, errors
@@ -28,9 +28,16 @@ async def create(
         raise errors.ValidationError(
             "prompts are project-private and cannot be subscribed across projects"
         )
+    if kind == "Secret":
+        raise errors.ValidationError(
+            "secrets cannot be subscribed across projects; reference them from "
+            "a deployment in their own namespace instead"
+        )
     ns = await session.get(models.Namespace, data.namespace)
     if ns is None:
         raise errors.NotFoundError(f"namespace {data.namespace!r} not found")
+    if ns.team_id == team.id:
+        raise errors.ConflictError("cannot subscribe to your own team's namespace")
 
     target: models.Resource | None = None
     if data.name != "*":
@@ -38,12 +45,20 @@ async def create(
         if target is None:
             raise errors.NotFoundError(f"{kind.lower()}/{data.namespace}/{data.name} not found")
 
-    if ns.team_id == team.id:
-        raise errors.ConflictError("cannot subscribe to your own team's namespace")
+    # Restricted resources require approval by the owning team; everything
+    # else activates immediately. Wildcard subscriptions activate immediately
+    # but only ever grant INTERNAL resources (see resource_service grants).
+    status = (
+        models.SUB_PENDING
+        if target is not None and target.visibility == models.VISIBILITY_RESTRICTED
+        else models.SUB_ACTIVE
+    )
 
-    dup = (
+    # A previously rejected/revoked subscription row blocks re-creation via
+    # the unique constraint; revive it instead of dead-locking the target.
+    existing = (
         await session.execute(
-            select(models.Subscription.id).where(
+            select(models.Subscription).where(
                 models.Subscription.subscriber_team_id == team.id,
                 models.Subscription.kind == kind,
                 models.Subscription.namespace == data.namespace,
@@ -51,16 +66,23 @@ async def create(
             )
         )
     ).scalar_one_or_none()
-    if dup is not None:
-        raise errors.ConflictError("subscription already exists for this target")
+    if existing is not None:
+        if existing.status != models.SUB_REVOKED:
+            raise errors.ConflictError("subscription already exists for this target")
+        existing.status = status
+        existing.events = data.events or ["new_version"]
+        existing.requested_by = actor.id
+        existing.approved_by = None
+        await audit.record(
+            session, actor=actor, action="subscription.request",
+            kind=kind, namespace=data.namespace, name=data.name,
+            detail={"team": team_name, "status": status, "revived": True},
+            source_ip=source_ip,
+        )
+        await session.commit()
+        await session.refresh(existing)
+        return existing
 
-    # Restricted resources require approval by the owning team; everything else
-    # activates immediately.
-    status = (
-        models.SUB_PENDING
-        if target is not None and target.visibility == models.VISIBILITY_RESTRICTED
-        else models.SUB_ACTIVE
-    )
     sub = models.Subscription(
         subscriber_team_id=team.id,
         kind=kind,
@@ -86,8 +108,6 @@ async def approve(
     source_ip: str | None = None,
 ) -> models.Subscription:
     sub = await _get_sub(session, sub_id)
-    if sub.status != models.SUB_PENDING:
-        raise errors.ConflictError(f"subscription is {sub.status!r}, not pending approval")
     ns = await session.get(models.Namespace, sub.namespace)
     if ns is None:
         raise errors.NotFoundError(f"namespace {sub.namespace!r} no longer exists")
@@ -97,8 +117,23 @@ async def approve(
             raise errors.PermissionDeniedError(
                 "only an admin of the team that owns the target namespace can decide"
             )
-    sub.status = models.SUB_ACTIVE if approved else models.SUB_REVOKED
-    sub.approved_by = actor.id
+    # Conditional transition: concurrent approve/reject decisions cannot both
+    # win — the second one observes the status already moved on.
+    result = await session.execute(
+        update(models.Subscription)
+        .where(
+            models.Subscription.id == sub.id,
+            models.Subscription.status == models.SUB_PENDING,
+        )
+        .values(
+            status=models.SUB_ACTIVE if approved else models.SUB_REVOKED,
+            approved_by=actor.id,
+        )
+    )
+    if result.rowcount == 0:
+        raise errors.ConflictError(
+            f"subscription is {sub.status!r}, not pending approval"
+        )
     await audit.record(
         session, actor=actor, action="subscription.approve" if approved else "subscription.reject",
         kind=sub.kind, namespace=sub.namespace, name=sub.name,
@@ -115,8 +150,6 @@ async def revoke(
     """Revoke a subscription. Allowed for: the subscriber team, the team that
     owns the target namespace (grant revocation), or a platform admin."""
     sub = await _get_sub(session, sub_id)
-    if sub.status == models.SUB_REVOKED:
-        raise errors.ConflictError("subscription already revoked")
 
     allowed = actor.is_platform_admin
     revoked_by = "subscriber"
@@ -140,7 +173,16 @@ async def revoke(
             "only the subscriber or the target project's admin can revoke"
         )
 
-    sub.status = models.SUB_REVOKED
+    result = await session.execute(
+        update(models.Subscription)
+        .where(
+            models.Subscription.id == sub.id,
+            models.Subscription.status != models.SUB_REVOKED,
+        )
+        .values(status=models.SUB_REVOKED)
+    )
+    if result.rowcount == 0:
+        raise errors.ConflictError("subscription already revoked")
     await audit.record(
         session, actor=actor, action="subscription.revoke", kind=sub.kind,
         namespace=sub.namespace, name=sub.name, detail={"subscription": str(sub.id), "by": revoked_by},

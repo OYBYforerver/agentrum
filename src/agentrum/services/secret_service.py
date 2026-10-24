@@ -2,7 +2,9 @@
 
 The master key comes from ARK_SECRET_ENCRYPTION_KEY (a Fernet key). When
 unset, one is derived from ARK_SECRET_KEY — fine for development, loudly
-discouraged in production.
+discouraged in production. Several comma-separated keys may be configured:
+values are encrypted with the first one, older keys keep decrypting
+(key rotation without re-encrypting everything in one go).
 """
 
 import base64
@@ -27,11 +29,12 @@ def _get_fernet():
     global _fernet, _warned
     if _fernet is not None:
         return _fernet
-    from cryptography.fernet import Fernet
+    from cryptography.fernet import Fernet, MultiFernet
 
     settings = get_settings()
     if settings.secret_encryption_key:
-        key = settings.secret_encryption_key.encode()
+        keys = [k.strip() for k in settings.secret_encryption_key.split(",") if k.strip()]
+        fernets = [Fernet(key) for key in keys]
     else:
         if not _warned:
             logger.warning(
@@ -40,8 +43,8 @@ def _get_fernet():
             )
             _warned = True
         digest = hashlib.sha256(settings.secret_key.encode()).digest()
-        key = base64.urlsafe_b64encode(digest)
-    _fernet = Fernet(key)
+        fernets = [Fernet(base64.urlsafe_b64encode(digest))]
+    _fernet = fernets[0] if len(fernets) == 1 else MultiFernet(fernets)
     return _fernet
 
 
@@ -50,7 +53,13 @@ def encrypt(value: str) -> str:
 
 
 def decrypt(ciphertext: str) -> str:
-    return _get_fernet().decrypt(ciphertext.encode()).decode()
+    try:
+        return _get_fernet().decrypt(ciphertext.encode()).decode()
+    except Exception as exc:
+        raise errors.ValidationError(
+            "a secret payload is unreadable with the configured encryption key "
+            "(key rotated without re-encrypting?)"
+        ) from exc
 
 
 async def set_payloads(session: AsyncSession, resource_id: uuid.UUID, data: dict[str, str]) -> None:
@@ -62,6 +71,16 @@ async def set_payloads(session: AsyncSession, resource_id: uuid.UUID, data: dict
                 resource_id=resource_id, key=key, ciphertext=encrypt(value)
             )
         )
+
+
+async def get_secret_keys(session: AsyncSession, resource_id: uuid.UUID) -> list[str]:
+    """Key names only — no decryption, no plaintext in memory."""
+    rows = (
+        await session.execute(
+            select(models.SecretPayload.key).where(models.SecretPayload.resource_id == resource_id)
+        )
+    ).scalars().all()
+    return list(rows)
 
 
 async def get_payloads(session: AsyncSession, resource_id: uuid.UUID) -> dict[str, str]:
@@ -77,7 +96,12 @@ async def resolve_env(
     session: AsyncSession, env_entries: list[dict], default_namespace: str
 ) -> dict[str, str]:
     """Resolve a spec's env list (value or valueFrom.secretRef) into plain
-    key/values. Used by the deployment controller."""
+    key/values. Used by the deployment controller.
+
+    secretRefs may only point at secrets in the referencing resource's own
+    namespace: the controller runs without an actor, so any cross-namespace
+    reference would be an unauthenticated read of another project's secrets.
+    """
     from agentrum.services.resource_service import _get_resource
 
     resolved: dict[str, str] = {}
@@ -90,6 +114,11 @@ async def resolve_env(
             continue
         ref = entry.get("value") is None and (entry.get("value_from") or {}).get("secret_ref") or {}
         namespace = ref.get("namespace") or default_namespace
+        if namespace != default_namespace:
+            raise errors.PermissionDeniedError(
+                f"secretRef {namespace}/{ref.get('name')!r} crosses namespaces; "
+                f"secrets can only be referenced within {default_namespace!r}"
+            )
         secret = await _get_resource(session, "Secret", namespace, ref.get("name", ""))
         if secret is None:
             raise errors.ValidationError(

@@ -9,8 +9,9 @@ private repositories authenticate via a Secret resource holding
 import asyncio
 import logging
 import re
+import socket
 from contextlib import suppress
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,28 +26,133 @@ logger = logging.getLogger("agentrum.git")
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
-
-def _with_credentials(url: str, username: str, password: str) -> str:
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        return url  # local paths / ssh are used as-is
-    return urlunparse(parsed._replace(netloc=f"{username}:{password}@{parsed.netloc}"))
+# Skill entrypoint snapshots larger than this are rejected: the snapshot
+# lives inside the immutable version's spec (JSONB), and skills are meant
+# to be small instruction files.
+_MAX_ENTRYPOINT_BYTES = 256 * 1024
 
 
-def _ls_remote_sync(url: str, ref: str) -> str:
+def parse_frontmatter(content: str) -> tuple[dict, str]:
+    """Split a `---\\nYAML\\n---\\n` frontmatter block off a markdown file.
+    Returns ({}, content) when no frontmatter is present."""
+    import yaml
+
+    if not content.startswith("---"):
+        return {}, content
+    lines = content.split("\n")
+    if lines[0].strip() != "---":
+        return {}, content
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            raw = "\n".join(lines[1:i])
+            try:
+                meta = yaml.safe_load(raw) or {}
+            except yaml.YAMLError as exc:
+                raise errors.ValidationError(f"invalid frontmatter: {redact(exc)}") from exc
+            if not isinstance(meta, dict):
+                raise errors.ValidationError("frontmatter must be a YAML mapping")
+            return meta, "\n".join(lines[i + 1:])
+    return {}, content
+
+
+def _snapshot_entrypoint_sync(
+    url: str, sha: str, path: str, creds: tuple[str, str] | None
+) -> dict:
+    """Clone without checkout and read one file at an exact commit.
+    Returns {path, content}. Repos are read-only in a temp dir."""
+    import posixpath
+    import tempfile
+
+    from dulwich import porcelain
+    from dulwich.objects import Blob, Tree
+
+    previous_timeout = socket.getdefaulttimeout()
+    try:
+        socket.setdefaulttimeout(get_settings().git_timeout_seconds)
+        kwargs: dict = {}
+        if creds:
+            kwargs = {"username": creds[0] or None, "password": creds[1]}
+        with tempfile.TemporaryDirectory(prefix="agentrum-skill-") as tmp:
+            repo = porcelain.clone(url, tmp, checkout=False, **kwargs)
+            store = repo.object_store
+            tree: Tree = store[store[sha.encode()].tree]
+            segments = [s for s in posixpath.normpath(path).split("/") if s not in ("", ".")]
+            data: bytes | None = None
+            for i, segment in enumerate(segments):
+                entry = next((e for e in tree.items() if e.path.decode() == segment), None)
+                if entry is None:
+                    raise errors.ValidationError(
+                        f"entrypoint {path!r} not found in the repository at the pinned commit"
+                    )
+                obj = store[entry.sha]
+                if i == len(segments) - 1:
+                    if not isinstance(obj, Blob):
+                        raise errors.ValidationError(f"entrypoint {path!r} is not a file")
+                    data = obj.data
+                else:
+                    if not isinstance(obj, Tree):
+                        raise errors.ValidationError(
+                            f"entrypoint path {path!r} traverses a non-directory"
+                        )
+                    tree = obj
+    finally:
+        socket.setdefaulttimeout(previous_timeout)
+    assert data is not None
+    if len(data) > _MAX_ENTRYPOINT_BYTES:
+        raise errors.ValidationError(
+            f"entrypoint {path!r} is {len(data)} bytes; the snapshot cap is {_MAX_ENTRYPOINT_BYTES}"
+        )
+    return {"path": path, "content": data.decode("utf-8", errors="replace")}
+
+
+def redact(text: str) -> str:
+    """Strip any user:password userinfo from URLs embedded in error text so
+    credentials decrypted from Secrets never reach API responses or logs."""
+    return re.sub(r"(https?://)([^/@\s:]+):([^/@\s]+)@", r"\1\2:***@", str(text))
+
+
+def _ls_remote_sync(url: str, ref: str, creds: tuple[str, str] | None) -> str:
     from dulwich import porcelain
 
-    refs = porcelain.ls_remote(url)  # dict: bytes refname -> bytes sha
+    # Bound the socket wait; dulwich itself has no timeout parameter. Applies
+    # to sockets created on this thread only (restored right after).
+    previous_timeout = socket.getdefaulttimeout()
+    try:
+        socket.setdefaulttimeout(get_settings().git_timeout_seconds)
+        kwargs = {}
+        if creds:
+            kwargs = {"username": creds[0] or None, "password": creds[1]}
+        result = porcelain.ls_remote(url, **kwargs)
+    finally:
+        socket.setdefaulttimeout(previous_timeout)
+    # result.refs maps refname (bytes) -> sha (bytes); `.refs` is the current
+    # dulwich API (dict-style access on the result is deprecated).
+    refs = result.refs
+    sha = _pick_ref(refs, ref)
+    if sha is None:
+        host = urlparse(url).hostname or url
+        raise errors.ValidationError(f"git ref {ref!r} not found in remote ({host})")
+    return sha.decode()
+
+
+def _pick_ref(refs: dict, ref: str):  # type: ignore[no-untyped-def]
+    """Resolve a ref to a sha. Exact matches only: a misspelled branch/tag
+    must fail, never silently fall back to HEAD. Annotated tags resolve to
+    the peeled commit sha when the remote advertises one."""
     wanted = f"refs/heads/{ref}".encode()
-    tags = f"refs/tags/{ref}".encode()
-    for candidate in (wanted, tags, b"HEAD"):
-        if candidate in refs:
-            return refs[candidate].decode()
-    key = ref.encode()
-    if key in refs:
-        return refs[key].decode()
-    host = urlparse(url).hostname or url
-    raise errors.ValidationError(f"git ref {ref!r} not found in remote ({host})")
+    if ref == "HEAD":
+        return refs.get(b"HEAD")
+    for candidate in (wanted, f"refs/tags/{ref}".encode()):
+        sha = refs.get(candidate)
+        if sha is not None:
+            peeled = refs.get(candidate + b"^{}")  # annotated tag -> commit
+            return peeled or sha
+    short = ref.encode()
+    sha = refs.get(short)
+    if sha is not None:
+        peeled = refs.get(short + b"^{}")
+        return peeled or sha
+    return None
 
 
 async def _credentials_for(session: AsyncSession, namespace: str, credentials_ref: str | None):
@@ -91,15 +197,67 @@ async def resolve_git_source(session: AsyncSession, namespace: str, git: dict) -
         return resolved
 
     creds = await _credentials_for(session, namespace, git.get("credentials_ref"))
-    remote_url = _with_credentials(url, *creds) if creds else url
     try:
-        sha = await asyncio.to_thread(_ls_remote_sync, remote_url, ref)
+        sha = await asyncio.wait_for(
+            asyncio.to_thread(_ls_remote_sync, url, ref, creds),
+            timeout=get_settings().git_timeout_seconds + 5,
+        )
     except errors.ValidationError:
         raise
     except Exception as exc:
-        raise errors.ValidationError(f"cannot resolve git ref: {exc}") from exc
+        raise errors.ValidationError(
+            f"cannot resolve git ref: {redact(exc)}"
+        ) from exc
     resolved["resolved_sha"] = sha
     return resolved
+
+
+async def snapshot_skill_entrypoint(
+    session: AsyncSession, namespace: str, git: dict, resource_name: str,
+    entrypoint: str | None = None,
+) -> dict:
+    """Read the skill's entrypoint file at the pinned commit and parse its
+    YAML frontmatter.
+
+    Returns {path, content, frontmatter}. The content snapshot makes the
+    registry self-contained (the upstream repo can disappear; the published
+    version still carries what it shipped). Follows the Anthropic skill
+    format: when frontmatter exists, `name` must match the resource name and
+    `description` is required — a catalog entry that disagrees with its own
+    content is not publishable ("no fake features" rule)."""
+    url = git["url"]
+    sha = git["resolved_sha"]
+    subdirectory = (git.get("subdirectory") or "").strip("/")
+    entrypoint = (entrypoint or "SKILL.md").strip("/")
+    path = f"{subdirectory}/{entrypoint}" if subdirectory else entrypoint
+
+    creds = await _credentials_for(session, namespace, git.get("credentials_ref"))
+    try:
+        snapshot = await asyncio.wait_for(
+            asyncio.to_thread(_snapshot_entrypoint_sync, url, sha, path, creds),
+            timeout=get_settings().git_timeout_seconds + 30,
+        )
+    except errors.ValidationError:
+        raise
+    except Exception as exc:
+        raise errors.ValidationError(
+            f"cannot snapshot skill entrypoint: {redact(exc)}"
+        ) from exc
+
+    meta, _body = parse_frontmatter(snapshot["content"])
+    if meta:
+        fm_name = meta.get("name")
+        if fm_name and str(fm_name) != resource_name:
+            raise errors.ValidationError(
+                f"frontmatter name {fm_name!r} does not match the resource name {resource_name!r}"
+            )
+        if not meta.get("description"):
+            raise errors.ValidationError(
+                f"entrypoint {path!r} has frontmatter but no description; "
+                "skills need a description to be discoverable"
+            )
+    snapshot["frontmatter"] = meta
+    return snapshot
 
 
 async def check_drift_once(session: AsyncSession) -> int:
@@ -111,24 +269,17 @@ async def check_drift_once(session: AsyncSession) -> int:
 
     rows = (
         await session.execute(
-            select(models.Resource).where(
-                models.Resource.kind == "Skill", models.Resource.deleted_at.is_(None)
-            )
+            select(models.Resource)
+            .where(models.Resource.kind == "Skill", models.Resource.deleted_at.is_(None))
+            .order_by(models.Resource.id)
         )
     ).scalars().all()
     if not rows:
         return 0
 
-    latest: dict = {}
-    versions = (
-        await session.execute(
-            select(models.ResourceVersion)
-            .where(models.ResourceVersion.resource_id.in_([r.id for r in rows]))
-            .order_by(models.ResourceVersion.version.desc())
-        )
-    ).scalars().all()
-    for rv in versions:
-        latest.setdefault(rv.resource_id, rv)
+    from agentrum.services.resource_service import latest_versions
+
+    latest = await latest_versions(session, [r.id for r in rows])
 
     checked = 0
     for resource in rows:
@@ -138,10 +289,15 @@ async def check_drift_once(session: AsyncSession) -> int:
             continue  # not git-sourced, or pinned by explicit sha (cannot drift)
         try:
             creds = await _credentials_for(session, resource.namespace, git.get("credentials_ref"))
-            remote_url = _with_credentials(git["url"], *creds) if creds else git["url"]
-            upstream = await asyncio.to_thread(_ls_remote_sync, remote_url, git["ref"])
+            upstream = await asyncio.wait_for(
+                asyncio.to_thread(_ls_remote_sync, git["url"], git["ref"], creds),
+                timeout=get_settings().git_timeout_seconds + 5,
+            )
         except Exception as exc:  # noqa: BLE001 - unreachable remotes are logged, not fatal
-            logger.warning("skill drift check failed for %s/%s: %s", resource.namespace, resource.name, exc)
+            logger.warning(
+                "skill drift check failed for %s/%s: %s",
+                resource.namespace, resource.name, redact(exc),
+            )
             continue
         checked += 1
         drifting = upstream != git["resolved_sha"]
@@ -154,14 +310,29 @@ async def check_drift_once(session: AsyncSession) -> int:
                 else f"upstream matches {upstream[:8]}"
             ),
         }
-        if (resource.status or {}).get("conditions") != [condition]:
-            resource.status = {"conditions": [condition]}
-    await session.commit()
+        _merge_condition(resource, condition)
+        # Commit per resource: a hang or failure on one skill must not hold a
+        # transaction (or lose the results) for every other skill.
+        await session.commit()
     return checked
+
+
+def _merge_condition(resource: models.Resource, condition: dict) -> None:
+    """Upsert one condition by type, preserving conditions written by others
+    (probe health, reconcile state, ...)."""
+    status = dict(resource.status or {})
+    conditions = [dict(c) for c in status.get("conditions", []) if c.get("type")]
+    conditions = [c for c in conditions if c["type"] != condition["type"]]
+    conditions.append(condition)
+    status["conditions"] = conditions
+    resource.status = status
 
 
 async def run_forever() -> None:  # pragma: no cover - background loop
     interval = get_settings().skill_drift_interval_seconds
+    if interval <= 0:
+        logger.info("skill drift checker disabled (interval=0)")
+        return
     logger.info("skill drift checker started (interval=%ss)", interval)
     while True:
         try:
@@ -171,7 +342,7 @@ async def run_forever() -> None:  # pragma: no cover - background loop
                     logger.info("checked %s git-sourced skill(s)", n)
         except Exception:
             logger.exception("skill drift tick failed")
-        await asyncio.sleep(interval)
+        await asyncio.sleep(max(interval, 1))
 
 
 def start_drift_checker() -> asyncio.Task:

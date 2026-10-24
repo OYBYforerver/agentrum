@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 import httpx
 from authlib.jose import JsonWebKey, JsonWebToken
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentrum import audit, errors
@@ -86,7 +87,12 @@ def make_state(provider: str, nonce: str) -> str:
     import jwt
 
     settings = get_settings()
-    payload = {"p": provider, "n": nonce, "exp": int(time.time()) + 600}
+    payload = {
+        "p": provider,
+        "n": nonce,
+        "exp": int(time.time()) + 600,
+        "typ": "state",  # distinct from session tokens sharing this key
+    }
     return jwt.encode(payload, settings.secret_key, algorithm="HS256")
 
 
@@ -98,6 +104,8 @@ def read_state(state: str, provider: str) -> str:
         payload = jwt.decode(state, settings.secret_key, algorithms=["HS256"])
     except jwt.PyJWTError as exc:
         raise errors.PermissionDeniedError("invalid SSO state") from exc
+    if payload.get("typ") != "state":
+        raise errors.PermissionDeniedError("invalid SSO state")
     if payload.get("p") != provider:
         raise errors.PermissionDeniedError("SSO state provider mismatch")
     return payload["n"]
@@ -152,7 +160,9 @@ async def exchange_code(provider: str, code: str) -> dict:
             "client_secret": cfg["client_secret"],
         }
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(token_url, json=data)
+        # RFC 6749: the token endpoint takes form-encoded bodies; strict IdPs
+        # reject JSON.
+        resp = await client.post(token_url, data=data)
         resp.raise_for_status()
         body = resp.json()
     if cfg["mode"] == "oauth2-userinfo" and isinstance(body.get("data"), dict):
@@ -160,7 +170,7 @@ async def exchange_code(provider: str, code: str) -> dict:
     return body
 
 
-async def fetch_identity(provider: str, tokens: dict) -> dict:
+async def fetch_identity(provider: str, tokens: dict, nonce: str | None = None) -> dict:
     """Return {subject, username, display_name, email}."""
     cfg = provider_config(provider)
     if cfg["mode"] == "oidc":
@@ -173,9 +183,18 @@ async def fetch_identity(provider: str, tokens: dict) -> dict:
             jwks_resp.raise_for_status()
         key_set = JsonWebKey().import_key_set(jwks_resp.json())
         claims = JsonWebToken(["RS256", "ES256"]).decode(
-            id_token, key_set, claims_options={"iss": {"essential": True}, "aud": {"essential": True, "value": cfg["client_id"]}}
+            id_token, key_set,
+            claims_options={
+                # Pin the issuer to the configured value, not just presence.
+                "iss": {"essential": True, "value": cfg["issuer"]},
+                "aud": {"essential": True, "value": cfg["client_id"]},
+            },
         )
         claims.validate(now=time.time(), leeway=60)
+        # The id_token must be bound to the authorization request that asked
+        # for it (nonce round-trip).
+        if nonce is not None and claims.get("nonce") != nonce:
+            raise errors.PermissionDeniedError("id_token nonce mismatch")
         return {
             "subject": claims["sub"],
             "username": claims.get("preferred_username") or claims.get("email", "").split("@")[0],
@@ -243,7 +262,25 @@ async def login_or_signup(
         session, actor=None, action="user.oidc_create",
         detail={"provider": provider, "username": username}, source_ip=source_ip,
     )
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Concurrent JIT signup for the same identity: whoever lost the race
+        # re-reads the winner instead of 500ing.
+        await session.rollback()
+        user = (
+            await session.execute(
+                select(models.User).where(
+                    models.User.idp_provider == provider,
+                    models.User.idp_subject == identity["subject"],
+                )
+            )
+        ).scalar_one_or_none()
+        if user is None:
+            raise errors.ConflictError(
+                "SSO identity registration raced; please retry"
+            ) from None
+        return user, False
     await session.refresh(user)
     logger.info("provisioned SSO user %r from %s", username, provider)
     return user, True

@@ -32,6 +32,8 @@ class ResourceOut(BaseModel):
     description: str | None
     catalog: dict[str, Any] = {}
     status: dict[str, Any] = {}
+    # {"at", "by", "reason", "successor"} when deprecated, else None.
+    deprecation: dict[str, Any] | None = None
     secret_keys: list[str] | None = None
     created_by: str
     created_at: datetime
