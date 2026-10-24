@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 430" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <linearGradient id="hd" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4F46E5"/><stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#64748B"/>
+    </marker>
+  </defs>
+
+  <text x="480" y="34" text-anchor="middle" font-size="20" font-weight="700" fill="#0F172A">Agentrum 架构</text>
+
+  <!-- clients -->
+  <rect x="20" y="60" width="170" height="120" rx="12" fill="#F8FAFC" stroke="#E2E8F0"/>
+  <text x="105" y="88" text-anchor="middle" font-size="14" font-weight="700" fill="#0F172A">客户端</text>
+  <text x="105" y="112" text-anchor="middle" font-size="12" fill="#475569">控制台 UI(中英双语)</text>
+  <text x="105" y="132" text-anchor="middle" font-size="12" fill="#475569">CLI(apply / get)</text>
+  <text x="105" y="152" text-anchor="middle" font-size="12" fill="#475569">IDE(MCP 客户端)</text>
+  <text x="105" y="172" text-anchor="middle" font-size="12" fill="#475569">CI / 运行时(AK·SK)</text>
+
+  <!-- API layer -->
+  <rect x="250" y="60" width="200" height="120" rx="12" fill="#EEF2FF" stroke="#C7D2FE"/>
+  <text x="350" y="88" text-anchor="middle" font-size="14" font-weight="700" fill="#312E81">API 层 · FastAPI</text>
+  <text x="350" y="112" text-anchor="middle" font-size="12" fill="#4338CA">JWT / AK·SK 认证</text>
+  <text x="350" y="132" text-anchor="middle" font-size="12" fill="#4338CA">声明式 REST(apply/get)</text>
+  <text x="350" y="152" text-anchor="middle" font-size="12" fill="#4338CA">MCP 工具面(/mcp)</text>
+  <text x="350" y="172" text-anchor="middle" font-size="12" fill="#4338CA">稳定错误码 {code, detail}</text>
+
+  <!-- services -->
+  <rect x="510" y="60" width="200" height="120" rx="12" fill="#ECFEFF" stroke="#A5F3FC"/>
+  <text x="610" y="88" text-anchor="middle" font-size="14" font-weight="700" fill="#155E75">服务层</text>
+  <text x="610" y="112" text-anchor="middle" font-size="12" fill="#0E7490">多租户 / 可见性 / 订阅审批</text>
+  <text x="610" y="132" text-anchor="middle" font-size="12" fill="#0E7490">部署调和控制器</text>
+  <text x="610" y="152" text-anchor="middle" font-size="12" fill="#0E7490">健康探测 / 漂移检测</text>
+  <text x="610" y="172" text-anchor="middle" font-size="12" fill="#0E7490">事务性 outbox 通知</text>
+
+  <!-- data -->
+  <rect x="770" y="60" width="170" height="120" rx="12" fill="#F0FDF4" stroke="#BBF7D0"/>
+  <text x="855" y="88" text-anchor="middle" font-size="14" font-weight="700" fill="#14532D">PostgreSQL</text>
+  <text x="855" y="112" text-anchor="middle" font-size="12" fill="#166534">JSONB 资源 / 不可变版本</text>
+  <text x="855" y="132" text-anchor="middle" font-size="12" fill="#166534">审计 / outbox / 订阅</text>
+  <text x="855" y="152" text-anchor="middle" font-size="12" fill="#166534">Secret 信封加密</text>
+  <text x="855" y="172" text-anchor="middle" font-size="12" fill="#166534">pg_trgm 搜索</text>
+
+  <line x1="190" y1="120" x2="244" y2="120" stroke="#64748B" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="450" y1="120" x2="504" y2="120" stroke="#64748B" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="710" y1="120" x2="764" y2="120" stroke="#64748B" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- runtime row -->
+  <rect x="120" y="250" width="220" height="110" rx="12" fill="#FFF7ED" stroke="#FED7AA"/>
+  <text x="230" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#7C2D12">Kubernetes 集群</text>
+  <text x="230" y="302" text-anchor="middle" font-size="12" fill="#9A3412">原生 Deployment + Service</text>
+  <text x="230" y="322" text-anchor="middle" font-size="12" fill="#9A3412">镜像白名单 → 条件回写</text>
+  <text x="230" y="342" text-anchor="middle" font-size="12" fill="#9A3412">SA 最小授权</text>
+
+  <rect x="400" y="250" width="220" height="110" rx="12" fill="#FDF2F8" stroke="#FBCFE8"/>
+  <text x="510" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#831843">通知</text>
+  <text x="510" y="302" text-anchor="middle" font-size="12" fill="#9D174D">飞书群机器人</text>
+  <text x="510" y="322" text-anchor="middle" font-size="12" fill="#9D174D">通用 Webhook(HMAC 签名)</text>
+  <text x="510" y="342" text-anchor="middle" font-size="12" fill="#9D174D">发布 / 删除事件</text>
+
+  <rect x="680" y="250" width="220" height="110" rx="12" fill="#F5F3FF" stroke="#DDD6FE"/>
+  <text x="790" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#4C1D95">身份</text>
+  <text x="790" y="302" text-anchor="middle" font-size="12" fill="#5B21B6">OIDC SSO(任意 IdP)</text>
+  <text x="790" y="322" text-anchor="middle" font-size="12" fill="#5B21B6">飞书预设</text>
+  <text x="790" y="342" text-anchor="middle" font-size="12" fill="#5B21B6">项目 AK/SK(scopes)</text>
+
+  <line x1="610" y1="180" x2="270" y2="244" stroke="#94A3B8" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#ar)"/>
+  <line x1="610" y1="180" x2="500" y2="244" stroke="#94A3B8" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#ar)"/>
+
+  <!-- footer -->
+  <rect x="0" y="400" width="960" height="30" fill="url(#hd)" opacity="0.08"/>
+  <text x="480" y="420" text-anchor="middle" font-size="12" fill="#475569">控制面 ≠ 数据面:已部署负载独立运行,消费端容忍注册中心短时不可用</text>
+</svg>

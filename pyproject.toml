@@ -1,6 +1,6 @@
 [project]
 name = "agentrum"
-version = "0.3.0"
+version = "0.0.1"
 description = "Agentrum — multi-tenant registry for AI agents, MCP servers, skills and prompts. Publish, subscribe, run."
 readme = "README.md"
 license = { text = "Apache-2.0" }
