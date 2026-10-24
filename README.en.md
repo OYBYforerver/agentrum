@@ -26,9 +26,9 @@ AI assets end up scattered across chat threads, laptops and repos: nobody knows 
 | | |
 |---|---|
 | ![Overview](docs/img/01-overview.png) | ![Catalog](docs/img/02-catalog.png) |
-| *Project overview: resources, releases, subscribers, approvals at a glance* | *Catalog: organized by kind, visibility badges for internal / restricted / private* |
+| *Project overview: resources, releases, subscribers, approvals at a glance* | *Catalog: organized by kind, with visibility and deprecation badges* |
 | ![Detail](docs/img/03-detail.png) | ![Publish](docs/img/04-publish.png) |
-| *Resource detail: health, spec, version timeline* | *Publish: kind-specific forms, immutable tags* |
+| *Resource detail: health, version timeline, copy-ready IDE connection snippets* | *Publish: kind-specific forms (MCP args/auth headers), immutable tags* |
 | ![Subscribe](docs/img/05-subscribe.png) | ![Dark](docs/img/06-dark.png) |
 | *Cross-team subscribe: searchable picker — type `pay` to filter* | *Dark mode (light default, one-click toggle)* |
 
