@@ -12,8 +12,9 @@ Subscriber project member                  Owner project admin
                                                └─ reject  → revoked
 ```
 
-- `name: "*"` subscribes to the whole namespace (notified for every new release of that kind)
-- Subscribing to your own project → 409; subscribing to a Prompt → 400 (project-private)
+- `name: "*"` subscribes to the whole namespace, but a wildcard subscription covers **INTERNAL resources only**; restricted resources always require an exact-name, owner-approved subscription
+- Subscribing to your own project → 409; subscribing to a Prompt → 400 (project-private); subscribing to a Secret → 400 (secrets are never shared across projects)
+- A rejected/revoked subscription can be requested again — the target is never locked forever
 - When a resource is deleted, every active subscriber receives a `resource.deleted` notification
 
 ## Delivery (transactional outbox)

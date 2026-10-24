@@ -8,6 +8,8 @@ site_dir: .docs-build
 theme:
   name: material
   language: zh
+  logo: assets/icon.svg
+  favicon: assets/icon.svg
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default

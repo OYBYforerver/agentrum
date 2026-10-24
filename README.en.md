@@ -34,7 +34,7 @@ AI assets end up scattered across chat threads, laptops and repos: nobody knows 
 
 ## Highlights
 
-- **Multi-tenant projects** — provisioned by platform admins; admin / publisher / member roles per project
+- **Multi-tenant projects** — provisioned by platform admins; admin / publisher / developer / member roles per project (developers can publish, but not delete or manage deployments)
 - **AK/SK machine credentials** — registration, discovery and consumption all carry project-scoped keys; scopes gate read/publish/deploy; SK shown once, revocable
 - **Cross-project subscriptions** — `internal` is instant; `restricted` needs owner approval; **prompts stay project-private**
 - **Immutable versions** — tags never move; every release carries change notes and notifies subscribers

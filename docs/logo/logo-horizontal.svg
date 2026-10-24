@@ -1,28 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 160" width="640" height="160">
   <defs>
-    <linearGradient id="bgh" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#4F46E5"/>
       <stop offset="1" stop-color="#06B6D4"/>
     </linearGradient>
-    <marker id="arwh" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="1.8" markerHeight="1.8" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 Z" fill="#ffffff"/>
-    </marker>
   </defs>
-
   <g transform="translate(16,16) scale(0.25)">
-    <rect width="512" height="512" rx="112" fill="url(#bgh)"/>
-    <path d="M 366.9 215.6 A 118 118 0 0 0 145.1 215.6"
-          fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round"
-          marker-end="url(#arwh)"/>
-    <path d="M 145.1 296.4 A 118 118 0 0 0 366.9 296.4"
-          fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round"
-          marker-end="url(#arwh)"/>
-    <polygon points="256,192 200.6,224 200.6,288 256,320 311.4,288 311.4,224" fill="#ffffff"/>
-    <circle cx="256" cy="256" r="18" fill="#0EA5E9"/>
+    <rect width="512" height="512" rx="112" fill="url(#bg2)"/>
+    <path d="M132 382 L132 252 A124 124 0 0 1 380 252 L380 382"
+          fill="none" stroke="#fff" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="256,242 299.3,267 299.3,317 256,342 212.7,317 212.7,267" fill="#fff"/>
+    <circle cx="256" cy="292" r="14" fill="#0EA5E9"/>
   </g>
-
   <text x="176" y="92" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
-        font-size="64" font-weight="700" fill="#0F172A">Agentrum</text>
-  <text x="178" y="130" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
-        font-size="24" fill="#64748B">Publish · Subscribe · Run AI Assets</text>
+        font-size="62" font-weight="700" fill="#0F172A" letter-spacing="-1">Agentrum</text>
+  <text x="178" y="128" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="22" fill="#64748B">Publish · Subscribe · Run AI Assets</text>
 </svg>
