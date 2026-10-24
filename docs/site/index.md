@@ -2,8 +2,6 @@
 
 **多租户的企业级 AI 资产注册中心** — 发布 · 订阅 · 部署 Agent、MCP Server、Skill 与 Prompt。
 
-本项目基于开源项目 [agentregistry](https://github.com/agentregistry-dev/agentregistry) 的架构思想全新实现,致敬原项目(详见仓库 [README](https://github.com/agentrum/agentrum))。
-
 ## 按角色找文档
 
 | 你是谁 | 从这里开始 |

@@ -125,12 +125,6 @@ export default function Login({ onOk }: { onOk: () => void }) {
               <option value="en">English</option>
             </select>
           </div>
-          <p style={{ color: "var(--muted)", fontSize: 12, marginTop: 18 }}>
-            {t("login.ack")}{" "}
-            <a href="https://github.com/agentregistry-dev/agentregistry" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
-              agentregistry
-            </a>
-          </p>
         </div>
       </section>
     </main>

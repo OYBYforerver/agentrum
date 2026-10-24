@@ -26,8 +26,7 @@
     "mockRes": "resources",
     "mockPub": "published 7d",
     "mockSub": "subscribers",
-    "heroFoot": "Control plane, not data plane — deployed workloads run independently of the registry.",
-    "ack": "Built on the architecture of"
+    "heroFoot": "Control plane, not data plane — deployed workloads run independently of the registry."
   },
   "nav": {
     "catalog": "Catalog",

@@ -1,6 +1,6 @@
 # Deploy to Kubernetes
 
-The Agentrum deployment controller treats `Deployment` resources as **desired state** and reconciles them level-triggered into the target cluster — the same controller pattern as upstream agentregistry, but against native Kubernetes (no kagent dependency).
+The Agentrum deployment controller treats `Deployment` resources as **desired state** and reconciles them level-triggered into the target cluster using a native Kubernetes adapter (no kagent dependency).
 
 ## Publish a deployment
 

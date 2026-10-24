@@ -2,8 +2,6 @@
 
 **A multi-tenant registry for AI assets** — publish, subscribe to and run agents, MCP servers, skills and prompts.
 
-Agentrum is rebuilt on the architecture of the open-source [agentregistry](https://github.com/agentregistry-dev/agentregistry) project — see the repo [README](https://github.com/agentrum/agentrum) for the full acknowledgement.
-
 ## Find docs by role
 
 | You are… | Start here |

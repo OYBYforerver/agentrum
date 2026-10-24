@@ -1,8 +1,6 @@
 # Contributing to Agentrum
 
-Thanks for your interest! Agentrum is rebuilt on the architecture of the
-open-source [agentregistry](https://github.com/agentregistry-dev/agentregistry)
-project — we encourage contributing upstream too.
+Thanks for your interest in contributing to Agentrum!
 
 ## Development setup
 

@@ -1,6 +1,6 @@
 # 部署接入(Kubernetes)
 
-Agentrum 的部署控制器把 `Deployment` 资源当作**期望状态**,级别触发地调和到目标集群——与上游 agentregistry 的控制器模式一致,但使用原生 Kubernetes(不依赖 kagent)。
+Agentrum 的部署控制器把 `Deployment` 资源当作**期望状态**,级别触发地调和到目标集群——使用原生 Kubernetes 适配器(不依赖 kagent)。
 
 ## 发布一个部署
 

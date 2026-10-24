@@ -95,12 +95,6 @@ Two replicas, initContainer migrations, readiness probes, namespace-scoped contr
 
 Also served by the app at `/handbook/` and `/docs`.
 
-## Acknowledgements
-
-> **Agentrum is rebuilt on the architecture of the open-source [agentregistry](https://github.com/agentregistry-dev/agentregistry) project — full credit to its authors and community.**
->
-> The Kubernetes-style declarative resource model, immutable tags, soft delete, the reconciliation pattern and the registry-as-MCP-server idea all come from agentregistry. Agentrum is a **fresh Python implementation** (FastAPI + SQLAlchemy + PostgreSQL); no upstream code was copied. Implementation mistakes are ours.
-
 ## License
 
 [Apache-2.0](LICENSE)
