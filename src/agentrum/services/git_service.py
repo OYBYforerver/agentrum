@@ -186,6 +186,10 @@ async def resolve_git_source(session: AsyncSession, namespace: str, git: dict) -
     if not url:
         raise errors.ValidationError("source.git.url is required")
 
+    from agentrum.services import egress
+
+    egress.validate_outbound_url(url, purpose="skill git source")
+
     resolved: dict = {"url": url, "ref": ref}
     if git.get("subdirectory"):
         resolved["subdirectory"] = git["subdirectory"]

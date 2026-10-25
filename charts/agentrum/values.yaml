@@ -57,6 +57,13 @@ notifications:
   feishuWebhookUrl: ""
   feishuWebhookSecret: ""
 
+# Shared rate-limit counters. The default (memory) counts per replica; set
+# backend=redis (requires the agentrum[redis] image build) to make login
+# throttling and lockouts global across replicas.
+rateLimit:
+  backend: memory
+  redisUrl: ""
+
 observability:
   logFormat: json
   otelEnabled: false

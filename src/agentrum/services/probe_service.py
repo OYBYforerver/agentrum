@@ -108,10 +108,18 @@ async def probe_once(session) -> int:  # pragma: no cover - exercised via servic
     # Session-bound work (DB reads) happens sequentially here; the concurrent
     # phase below touches only HTTP.
     inputs: list[tuple[models.Resource, dict, dict[str, str]]] = []
+    blocked: list[tuple[models.Resource, dict]] = []
     for resource in rows:
         rv = latest.get(resource.id)
         spec = (rv.spec or {}) if rv else {}
         if not spec.get("endpoint"):
+            continue
+        try:
+            from agentrum.services import egress
+
+            egress.validate_outbound_url(str(spec["endpoint"]), purpose="health probe")
+        except Exception as exc:  # noqa: BLE001 - blocked targets degrade to a condition
+            blocked.append((resource, _condition(False, f"blocked target: {exc}")))
             continue
         headers: dict[str, str] = {}
         if spec.get("transport") == "streamable-http" and spec.get("headers"):
@@ -154,6 +162,7 @@ async def probe_once(session) -> int:  # pragma: no cover - exercised via servic
 
         results = await asyncio.gather(*(probe(r, spec, h) for r, spec, h in inputs))
 
+    results = list(results) + blocked
     for resource, condition in results:
         if condition is None:
             continue

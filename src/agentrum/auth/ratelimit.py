@@ -120,3 +120,182 @@ class FailureLockout:
             ),
             now=now,
         )
+
+
+# --- Shared-backend (async) facades -----------------------------------------
+#
+# The primitives above count per process: fine for single-replica, wrong for
+# the default Helm topology (2 replicas). The facades keep identical
+# semantics and delegate to Redis when ARK_RATELIMIT_BACKEND=redis, sharing
+# counters across replicas. Redis outages fail OPEN (allow + one warning per
+# process): rate limiting is a mitigation layer, and locking out every human
+# because its counters are down would turn a backend outage into a login
+# outage.
+
+import logging
+import uuid
+
+logger = logging.getLogger(__name__)
+
+_redis_client_cache: object | None = None
+
+
+def _shared_redis():  # pragma: no cover - wiring, exercised via fakeredis tests
+    global _redis_client_cache
+    if _redis_client_cache is not None:
+        return _redis_client_cache
+    from agentrum.config import get_settings
+
+    settings = get_settings()
+    if settings.ratelimit_backend != "redis":
+        return None
+    try:
+        import redis.asyncio as aioredis
+    except ImportError as exc:  # pragma: no cover - extra not installed
+        raise RuntimeError(
+            "ARK_RATELIMIT_BACKEND=redis requires the redis extra: "
+            "pip install 'agentrum[redis]'"
+        ) from exc
+    _redis_client_cache = aioredis.from_url(
+        settings.ratelimit_redis_url or "redis://localhost:6379/0"
+    )
+    return _redis_client_cache
+
+
+# Sliding window as a sorted set of timestamps; the count-vs-add decision
+# must be atomic or two replicas can each admit the same final event.
+_SLIDING_WINDOW_LUA = """
+local now = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local max_events = tonumber(ARGV[3])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, now - window)
+if redis.call('ZCARD', KEYS[1]) >= max_events then
+  return 0
+end
+redis.call('ZADD', KEYS[1], now, ARGV[4])
+redis.call('PEXPIRE', KEYS[1], window * 2)
+return 1
+"""
+
+# Failure tracking + lockout flip in one round trip, same atomicity reason.
+_LOCKOUT_RECORD_LUA = """
+local now = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local threshold = tonumber(ARGV[3])
+local lockms = tonumber(ARGV[4])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, now - window)
+redis.call('ZADD', KEYS[1], now, ARGV[5])
+redis.call('PEXPIRE', KEYS[1], window * 2)
+if redis.call('ZCARD', KEYS[1]) >= threshold then
+  redis.call('SET', KEYS[2], '1', 'PX', lockms)
+  redis.call('DEL', KEYS[1])
+  return 1
+end
+return 0
+"""
+
+
+class AsyncSlidingWindowLimiter:
+    """`SlidingWindowLimiter` semantics behind an async interface; counters
+    are shared across replicas when a Redis backend is configured."""
+
+    def __init__(self, max_events: int, window_seconds: float, prefix: str) -> None:
+        self.max_events = max_events
+        self.window_seconds = window_seconds
+        self.prefix = prefix
+        self._local = SlidingWindowLimiter(max_events, window_seconds)
+        self._warned = False
+
+    async def allow(self, key: str) -> bool:
+        redis = _shared_redis()
+        if redis is None:
+            return self._local.allow(key)
+        try:
+            now_ms = int(time.time() * 1000)
+            ok = await redis.eval(
+                _SLIDING_WINDOW_LUA, 1, f"{self.prefix}:{key}",
+                now_ms, int(self.window_seconds * 1000), self.max_events,
+                uuid.uuid4().hex,
+            )
+            return bool(ok)
+        except Exception:
+            if not self._warned:
+                logger.warning("rate-limit backend unreachable; failing open", exc_info=True)
+                self._warned = True
+            return True
+
+    async def reset(self, key: str) -> None:
+        redis = _shared_redis()
+        if redis is None:
+            self._local.reset(key)
+            return
+        try:
+            await redis.delete(f"{self.prefix}:{key}")
+        except Exception:  # reset is best-effort; a stuck counter only over-limits
+            if not self._warned:
+                logger.warning("rate-limit reset failed (best-effort)", exc_info=True)
+                self._warned = True
+
+
+class AsyncFailureLockout:
+    """`FailureLockout` semantics behind an async interface; the lock is a
+    plain key with a TTL so every replica observes it immediately."""
+
+    def __init__(
+        self, threshold: int, window_seconds: float, lock_seconds: float, prefix: str
+    ) -> None:
+        self.threshold = threshold
+        self.window_seconds = window_seconds
+        self.lock_seconds = lock_seconds
+        self.prefix = prefix
+        self._local = FailureLockout(threshold, window_seconds, lock_seconds)
+        self._warned = False
+
+    def _fail_key(self, key: str) -> str:
+        return f"{self.prefix}:fails:{key}"
+
+    def _lock_key(self, key: str) -> str:
+        return f"{self.prefix}:lock:{key}"
+
+    async def is_locked(self, key: str) -> int:
+        """Remaining lock seconds, 0 if not locked."""
+        redis = _shared_redis()
+        if redis is None:
+            return self._local.is_locked(key)
+        try:
+            pttl = await redis.pttl(self._lock_key(key))
+            # -2: missing, -1: no expiry (never set by us) — both mean unlocked.
+            return max(0, -(-pttl // 1000)) if pttl > 0 else 0
+        except Exception:
+            if not self._warned:
+                logger.warning("rate-limit backend unreachable; failing open", exc_info=True)
+                self._warned = True
+            return 0
+
+    async def record_failure(self, key: str) -> None:
+        redis = _shared_redis()
+        if redis is None:
+            self._local.record_failure(key)
+            return
+        try:
+            await redis.eval(
+                _LOCKOUT_RECORD_LUA, 2, self._fail_key(key), self._lock_key(key),
+                int(time.time() * 1000), int(self.window_seconds * 1000),
+                self.threshold, int(self.lock_seconds * 1000), uuid.uuid4().hex,
+            )
+        except Exception:
+            if not self._warned:
+                logger.warning("rate-limit backend unreachable; failing open", exc_info=True)
+                self._warned = True
+
+    async def reset(self, key: str) -> None:
+        redis = _shared_redis()
+        if redis is None:
+            self._local.reset(key)
+            return
+        try:
+            await redis.delete(self._fail_key(key), self._lock_key(key))
+        except Exception:  # reset is best-effort; a stuck counter only over-limits
+            if not self._warned:
+                logger.warning("rate-limit reset failed (best-effort)", exc_info=True)
+                self._warned = True

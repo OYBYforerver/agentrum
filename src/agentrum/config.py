@@ -35,7 +35,9 @@ class Settings(BaseSettings):
     # only enable when the proxy chain actually overwrites it.
     client_ip_header: str | None = None
 
-    # Login throttling (per-process; Redis-backed global limiting comes in Phase B)
+    # Login throttling. Counters live per-process unless a shared backend is
+    # configured below — multi-replica deployments should set
+    # ratelimit_backend=redis so windows and lockouts are global.
     login_max_per_window: int = 10
     login_window_seconds: int = 60
     lockout_threshold: int = 5
@@ -43,6 +45,12 @@ class Settings(BaseSettings):
     # Failures per username across all source IPs — raises the bar for
     # lockout-DoS against a victim behind a shared egress IP.
     lockout_username_threshold: int = 20
+    # Shared rate-limit counters: "memory" (default, per-process) or "redis"
+    # (global across replicas; requires the `agentrum[redis]` extra). If Redis
+    # is unreachable the limiters fail open (allow + loud warning) so a
+    # backend outage cannot take down logins entirely.
+    ratelimit_backend: str = "memory"
+    ratelimit_redis_url: str | None = None
 
     # Notifications (transactional outbox + background dispatcher)
     feishu_webhook_url: str | None = None  # Feishu custom bot webhook
@@ -81,6 +89,17 @@ class Settings(BaseSettings):
     audit_retention_days: int = 180
     notification_retention_days: int = 30
     skill_drift_interval_seconds: int = 300  # git-sourced skill upstream check (0 disables)
+
+    # Egress guard for server-initiated requests (git clone/ls-remote, health
+    # probes, skill content delivery). Publishers control these destinations,
+    # so the registry must not be aimable at itself, in-cluster services or
+    # cloud metadata. Private ranges stay reachable by default (internal git
+    # registries are the norm); loopback/link-local are blocked unless
+    # explicitly allowed. file:// git sources work only when explicitly
+    # enabled (local development / test fixtures).
+    egress_allow_private_addresses: bool = True
+    egress_allow_loopback: bool = False
+    egress_allow_file_sources: bool = False
 
     # Bundled handbook (built mkdocs site); mounted at /handbook when set
     docs_dir: str | None = None

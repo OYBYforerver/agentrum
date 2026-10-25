@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agentrum import audit, errors
 from agentrum.auth import security
 from agentrum.auth.ak_context import AK_SCOPES, ak_project_id_var, ak_scopes_var
-from agentrum.auth.ratelimit import FailureLockout, SlidingWindowLimiter
+from agentrum.auth.ratelimit import AsyncFailureLockout, AsyncSlidingWindowLimiter
 from agentrum.config import get_settings
 from agentrum.db import models
 from agentrum.db.engine import get_session
@@ -28,14 +28,16 @@ basic_scheme = HTTPBasic(auto_error=False)
 _settings = get_settings()
 # Brute-force throttling for machine credentials (human logins have their own
 # in the auth route): per-AK sliding window + lockout.
-_ak_limiter = SlidingWindowLimiter(
+_ak_limiter = AsyncSlidingWindowLimiter(
     max_events=_settings.login_max_per_window * 6,
     window_seconds=_settings.login_window_seconds,
+    prefix="rl:ak",
 )
-_ak_lockout = FailureLockout(
+_ak_lockout = AsyncFailureLockout(
     threshold=_settings.lockout_threshold * 3,
     window_seconds=_settings.lockout_seconds,
     lock_seconds=_settings.lockout_seconds,
+    prefix="rl:ak-lockout",
 )
 
 # Updating last_used_at on every request doubles write traffic and serializes
@@ -128,9 +130,9 @@ async def _resolve_access_key(
     MCP call shares the server's own address — but keeps the per-AK lockout
     so online SK guessing still trips a breaker."""
     ip = client_ip(request) or "unknown"
-    if enforce_ip_limit and not _ak_limiter.allow(f"ak:{ip}"):
+    if enforce_ip_limit and not await _ak_limiter.allow(f"ak:{ip}"):
         raise HTTPException(status_code=429, detail="too many requests, slow down")
-    locked_for = _ak_lockout.is_locked(f"ak:{username}")
+    locked_for = await _ak_lockout.is_locked(f"ak:{username}")
     if locked_for:
         raise HTTPException(
             status_code=429,
@@ -138,7 +140,7 @@ async def _resolve_access_key(
         )
 
     async def _fail(detail: str) -> None:
-        _ak_lockout.record_failure(f"ak:{username}")
+        await _ak_lockout.record_failure(f"ak:{username}")
         await audit.record(
             session, actor=None, action="access_key.auth_failed",
             detail={"access_key": username, "reason": detail}, source_ip=ip,

@@ -106,6 +106,14 @@ spec:
             - name: ARK_UI_ORIGIN
               value: {{ .Values.auth.uiOrigin | quote }}
             {{- end }}
+            {{- if eq .Values.rateLimit.backend "redis" }}
+            - name: ARK_RATELIMIT_BACKEND
+              value: "redis"
+            {{- if .Values.rateLimit.redisUrl }}
+            - name: ARK_RATELIMIT_REDIS_URL
+              value: {{ .Values.rateLimit.redisUrl | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.notifications.feishuWebhookUrl }}
             - name: ARK_FEISHU_WEBHOOK_URL
               value: {{ .Values.notifications.feishuWebhookUrl | quote }}

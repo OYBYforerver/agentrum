@@ -8,3 +8,4 @@ import os
 os.environ.setdefault("ARK_LOGIN_MAX_PER_WINDOW", "1000")
 os.environ.setdefault("ARK_LOCKOUT_THRESHOLD", "100")
 os.environ.setdefault("ARK_ALLOW_INSECURE", "true")
+os.environ.setdefault("ARK_EGRESS_ALLOW_FILE_SOURCES", "true")

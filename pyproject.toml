@@ -36,11 +36,18 @@ agentrum = "agentrum.cli.main:app"
 [dependency-groups]
 dev = [
     "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
     "httpx>=0.28.0",
     "dulwich>=0.22.0",
     "mcp>=1.9.0",
     "ruff>=0.8.0",
+    "fakeredis[lua]>=2.26.0",
 ]
+
+[project.optional-dependencies]
+# Shared rate-limit counters for multi-replica deployments
+# (ARK_RATELIMIT_BACKEND=redis).
+redis = ["redis>=5.2"]
 
 [build-system]
 requires = ["hatchling"]
@@ -59,3 +66,4 @@ ignore = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"

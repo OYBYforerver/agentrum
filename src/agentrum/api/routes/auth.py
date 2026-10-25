@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agentrum import audit
 from agentrum.auth import security
 from agentrum.auth.deps import client_ip, get_current_user
-from agentrum.auth.ratelimit import FailureLockout, SlidingWindowLimiter
+from agentrum.auth.ratelimit import AsyncFailureLockout, AsyncSlidingWindowLimiter
 from agentrum.config import get_settings
 from agentrum.db import models
 from agentrum.db.engine import get_session
@@ -25,21 +25,24 @@ from agentrum.schemas.auth import (
 router = APIRouter()
 
 _settings = get_settings()
-_login_limiter = SlidingWindowLimiter(
+_login_limiter = AsyncSlidingWindowLimiter(
     max_events=_settings.login_max_per_window,
     window_seconds=_settings.login_window_seconds,
+    prefix="rl:login",
 )
-_lockout = FailureLockout(
+_lockout = AsyncFailureLockout(
     threshold=_settings.lockout_threshold,
     window_seconds=_settings.lockout_seconds,
     lock_seconds=_settings.lockout_seconds,
+    prefix="rl:lockout",
 )
 # Per-username lockout across all source IPs: an attacker behind one egress
 # IP cannot lock out a victim by spraying failures with that IP.
-_username_lockout = FailureLockout(
+_username_lockout = AsyncFailureLockout(
     threshold=_settings.lockout_username_threshold,
     window_seconds=_settings.lockout_seconds,
     lock_seconds=_settings.lockout_seconds,
+    prefix="rl:lockout-user",
 )
 
 
@@ -54,13 +57,15 @@ async def login(
     ip = client_ip(request) or "unknown"
     key = f"{body.username}|{ip}"
 
-    locked_for = max(_lockout.is_locked(key), _username_lockout.is_locked(body.username))
+    locked_for = max(
+        await _lockout.is_locked(key), await _username_lockout.is_locked(body.username)
+    )
     if locked_for:
         raise HTTPException(
             status_code=429,
             detail=f"account temporarily locked, retry in {locked_for}s",
         )
-    if not _login_limiter.allow(ip):
+    if not await _login_limiter.allow(ip):
         raise HTTPException(status_code=429, detail="too many login attempts, slow down")
 
     user = (
@@ -71,8 +76,8 @@ async def login(
         # reveal whether the username exists.
         security.dummy_verify(body.password)
     if user is None or not security.verify_password(body.password, user.password_hash):
-        _lockout.record_failure(key)
-        _username_lockout.record_failure(body.username)
+        await _lockout.record_failure(key)
+        await _username_lockout.record_failure(body.username)
         await audit.record(
             session, actor=None, action="user.login_failed",
             detail={"username": body.username}, source_ip=ip,
@@ -81,8 +86,8 @@ async def login(
         raise HTTPException(status_code=401, detail="invalid username or password")
     if user.disabled_at is not None:
         raise HTTPException(status_code=403, detail="account is disabled")
-    _lockout.reset(key)
-    _username_lockout.reset(body.username)
+    await _lockout.reset(key)
+    await _username_lockout.reset(body.username)
     await audit.record(
         session, actor=user, action="user.login", source_ip=ip,
     )
