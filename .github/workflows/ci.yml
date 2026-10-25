@@ -43,10 +43,22 @@ jobs:
         run: uv run pytest -q
       - name: Migrate test database
         run: uv run alembic upgrade head
-      - name: Integration tests
+      - name: Start Dex (OIDC test IdP)
+        run: |
+          docker run -d --name dex -p 5556:5556             -v "$PWD/tests/integration/dex.yaml:/config.yaml"             --entrypoint /usr/local/bin/dex             ghcr.io/dexidp/dex:v2.41.1 serve /config.yaml
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:5556/healthz && break || sleep 1
+          done
+          curl -sf http://localhost:5556/healthz
+      - name: Integration tests (incl. OIDC code flow against Dex)
         run: uv run pytest tests/integration -q
         env:
           ARK_INTEGRATION: "1"
+          ARK_ALLOW_INSECURE: "true"
+          ARK_OIDC_GENERIC_ISSUER: http://localhost:5556
+          ARK_OIDC_GENERIC_CLIENT_ID: agentrum
+          ARK_OIDC_GENERIC_CLIENT_SECRET: ci-oidc-secret
+          ARK_OIDC_REDIRECT_BASE: http://localhost:12122
 
   ui:
     runs-on: ubuntu-latest
@@ -87,6 +99,63 @@ jobs:
             --set database.url="postgresql+asyncpg://u:p@h:5432/agentrum" \
             --set auth.secretKey=ci --set auth.bootstrapAdminPassword=ci \
             --set secrets.encryptionKey=ci >/dev/null
+
+  e2e-kind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install kind + kubectl + Helm
+        run: |
+          curl -sLo kind "https://github.com/kubernetes-sigs/kind/releases/download/v0.25.0/kind-linux-amd64"
+          chmod +x kind && sudo mv kind /usr/local/bin/
+          curl -sLO "https://dl.k8s.io/release/v1.31.4/bin/linux/amd64/kubectl"
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+      - name: Create kind cluster
+        run: kind create cluster --name agentrum-e2e --wait 60s
+      - name: Build and load server image
+        run: |
+          docker build -t agentrum/server:e2e .
+          kind load docker-image agentrum/server:e2e --name agentrum-e2e
+      - name: Install in-cluster PostgreSQL
+        run: |
+          kubectl create ns agentrum
+          kubectl -n agentrum create deployment postgres --image=postgres:16-alpine             --env=POSTGRES_USER=agentrum --env=POSTGRES_PASSWORD=agentrum --env=POSTGRES_DB=agentrum
+          kubectl -n agentrum expose deployment postgres --port=5432
+          kubectl -n agentrum rollout status deployment/postgres --timeout=180s
+      - name: Helm install agentrum
+        run: |
+          helm upgrade --install agentrum charts/agentrum             --namespace agentrum --set image.repository=agentrum/server --set image.tag=e2e             --set image.pullPolicy=Never             --set database.url="postgresql+asyncpg://agentrum:agentrum@postgres.agentrum.svc.cluster.local:5432/agentrum"             --set auth.secretKey=ci-secret-key-at-least-32-chars-long             --set auth.bootstrapAdminPassword=e2e-admin-pass             --set deploy.imageAllowlist="docker.io/library/nginx"             --set deploy.clusterNamespaces="e2e-apps"
+          kubectl -n agentrum rollout status deployment/agentrum --timeout=300s
+      - name: Publish a Deployment resource and verify reconciliation
+        run: |
+          kubectl -n agentrum port-forward svc/agentrum 12122:80 >/dev/null 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:12122/healthz && break || sleep 2; done
+          TOKEN=$(curl -s -X POST http://localhost:12122/v1/auth/login             -H 'content-type: application/json'             -d '{"username":"admin","password":"e2e-admin-pass"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+          # Agent + Deployment: allowed image reconciles into the cluster
+          curl -sf -X PUT http://localhost:12122/v1/resources/Agent/e2e/demo             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'             -d '{"spec":{"image":"nginx:1.27"},"tag":"v1"}'
+          curl -sf -X PUT http://localhost:12122/v1/resources/Deployment/e2e/demo-deploy             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'             -d '{"spec":{"target_kind":"Agent","target_namespace":"e2e","target_name":"demo","cluster_namespace":"e2e-apps","port":80},"tag":"v1"}'
+          for i in $(seq 1 30); do
+            COND=$(curl -s http://localhost:12122/v1/resources/Deployment/e2e/demo-deploy               -H "authorization: Bearer $TOKEN" | python3 -c 'import sys,json;print(json.dumps((json.load(sys.stdin).get("status") or {}).get("conditions",[])))')
+            echo "$COND" | grep -q '"True"' && break || sleep 5
+          done
+          echo "final conditions: $COND"
+          echo "$COND" | grep -q '"True"'
+          kubectl -n e2e-apps get deployment e2e-demo
+          kubectl -n e2e-apps get service e2e-demo
+          # Disallowed image is refused by the allowlist
+          curl -sf -X PUT http://localhost:12122/v1/resources/Agent/e2e/evil             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'             -d '{"spec":{"image":"quay.io/evil/evil:latest"},"tag":"v1"}'             && curl -sf -X PUT http://localhost:12122/v1/resources/Deployment/e2e/evil-deploy                -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'                -d '{"spec":{"target_kind":"Agent","target_namespace":"e2e","target_name":"evil","cluster_namespace":"e2e-apps"},"tag":"v1"}'             || echo "evil publish rejected at API level"
+          sleep 15
+          if kubectl -n e2e-apps get deployment e2e-evil >/dev/null 2>&1; then
+            echo "FAIL: disallowed image reconciled"; exit 1
+          fi
 
   docs:
     runs-on: ubuntu-latest

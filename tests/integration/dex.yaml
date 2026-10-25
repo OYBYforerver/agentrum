@@ -1,0 +1,26 @@
+# Dex IdP for the OIDC code-flow integration test (CI runs this via
+# `docker run -v $PWD/tests/integration/dex.yaml:/config.yaml …`).
+issuer: http://localhost:5556
+
+web:
+  http: 0.0.0.0:5556
+
+storage:
+  type: sqlite3
+  config:
+    file: /tmp/dex.db
+
+staticClients:
+  - id: agentrum
+    redirectURIs:
+      - http://localhost:12122/v1/auth/oidc/generic/callback
+    name: Agentrum CI
+    secret: ci-oidc-secret
+
+enablePasswordDB: true
+
+staticPasswords:
+  - email: dev@example.com
+    hash: $2b$10$CVmAWls2PhC1uIjMDuPrcOGR.OJX2AEsgQ1QfpnYyDR5j4YiqicDa  # "password"
+    username: dev
+    userID: "0831e1e0-1e13-4b1e-9d7c-000000000001"

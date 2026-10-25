@@ -135,7 +135,14 @@ async def build_authorize_url(provider: str, nonce: str) -> str:
     }
     if cfg.get("scopes"):
         params["scope"] = " ".join(cfg["scopes"])
-    return f"{cfg['authorize_url']}?{urlencode(params)}"
+    if cfg["mode"] == "oidc":
+        # Generic providers resolve their endpoints from the discovery
+        # document (same as exchange/identity below).
+        doc = await _discovery(cfg["issuer"])
+        authorize_url = doc["authorization_endpoint"]
+    else:
+        authorize_url = cfg["authorize_url"]
+    return f"{authorize_url}?{urlencode(params)}"
 
 
 async def exchange_code(provider: str, code: str) -> dict:
