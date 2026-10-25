@@ -31,7 +31,16 @@ mcp = MCPServer(
 
 def _bearer_from_ctx(ctx: Context) -> str | None:
     headers = getattr(ctx, "headers", None) or {}
-    return headers.get("authorization")
+    if hasattr(headers, "get"):
+        value = headers.get("authorization")
+        if value is not None:
+            return value
+    # Header maps outside the real transport (tests, middleware shims) may
+    # keep the original casing.
+    for key, value in headers.items():
+        if str(key).lower() == "authorization":
+            return value
+    return None
 
 
 async def _resolve_principal(ctx: Context) -> models.User:
@@ -142,6 +151,92 @@ async def list_resources(
             for r in items
         ]
     )
+
+
+@mcp.tool()
+async def list_prompts(ctx: Context, search: str = "", limit: int = 50) -> str:
+    """List prompt templates visible to you.
+
+    Prompts are project-private: you see your project's templates only.
+    Each entry carries its declared variables so clients can build forms.
+
+    Args:
+        search: substring match on name/description
+        limit: max entries (default 50, max 100)
+    """
+    from agentrum.services import resource_service
+
+    user = await _resolve_principal(ctx)
+    async with SessionLocal() as session:
+        items, latest, _total = await resource_service.list_resources(
+            session, user, kind="Prompt", q=search or None,
+            limit=max(1, min(int(limit), 100)),
+        )
+        return _dump(
+            [
+                {
+                    "ref": f"{r.kind}/{r.namespace}/{r.name}",
+                    "description": r.description,
+                    "latest_tag": (latest[r.id].tag if r.id in latest else None),
+                    "variables": (
+                        (latest[r.id].spec or {}).get("variables", [])
+                        if r.id in latest
+                        else []
+                    ),
+                }
+                for r in items
+            ]
+        )
+
+
+@mcp.tool()
+async def get_prompt(
+    ctx: Context, ref: str, tag: str = "", variables_json: str = ""
+) -> str:
+    """Fetch a prompt template, or render it with concrete values.
+
+    Without variables_json: the template and its declared variables.
+    With variables_json (a JSON object): the rendered prompt text,
+    validated against the declaration (required/unknown variables error).
+
+    Args:
+        ref: "Prompt/<namespace>/<name>"
+        tag: optional immutable tag (default: latest)
+        variables_json: JSON object of variable values, e.g. {"language": "python"}
+    """
+    import json as _json
+
+    from agentrum.services import prompt_service, resource_service
+
+    user = await _resolve_principal(ctx)
+    parts = [p for p in ref.split("/") if p]
+    if len(parts) != 3 or parts[0].lower() != "prompt":
+        raise ValueError(f"ref must be Prompt/<namespace>/<name>, got {ref!r}")
+    _, namespace, name = parts
+    async with SessionLocal() as session:
+        resource, rv = await resource_service.get_resource(
+            session, user, "Prompt", namespace, name, tag=tag or None
+        )
+        if rv is None:
+            raise ValueError("prompt has no published version")
+        spec = rv.spec or {}
+        if not variables_json:
+            return _dump(
+                {
+                    "ref": f"Prompt/{resource.namespace}/{resource.name}",
+                    "tag": rv.tag,
+                    "template": spec.get("template"),
+                    "variables": spec.get("variables", []),
+                }
+            )
+        try:
+            variables = _json.loads(variables_json)
+        except ValueError:
+            raise ValueError("variables_json must be a JSON object") from None
+        if not isinstance(variables, dict):
+            # decoded JSON with the wrong shape is a bad value, not a type error
+            raise ValueError("variables_json must be a JSON object")  # noqa: TRY004
+        return prompt_service.render(spec, variables)
 
 
 @mcp.tool()

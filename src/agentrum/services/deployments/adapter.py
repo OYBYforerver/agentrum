@@ -39,14 +39,21 @@ class DeploymentAdapter(Protocol):
         ...
 
 
-def _condition(ok: bool, message: str, reason: str = "Reconciled") -> dict:
-    return {
+def _condition(ok: bool, message: str, reason: str = "Reconciled", **extra) -> dict:
+    cond = {
         "type": "Ready",
         "status": "True" if ok else "False",
         "reason": reason,
         "message": message,
         "last_transition": datetime.now(UTC).isoformat(timespec="seconds"),
     }
+    cond.update(extra)
+    return cond
+
+
+def _service_url(plan: DeploymentPlan) -> str:
+    """Cluster-internal DNS for the reconciled Service."""
+    return f"http://{plan.name}.{plan.cluster_namespace}.svc:{plan.get('port', 8000)}"
 
 
 def _container_name(plan_name: str) -> str:
@@ -187,20 +194,26 @@ class KubernetesAdapter:
             ready = min(status.ready_replicas or 0, replicas)
         except Exception:  # noqa: BLE001 - status is best-effort
             ready = replicas = -1
+        url = _service_url(plan)
         if ready < 0:
             return _condition(
-                True, f"applied {plan['image']} to {plan['cluster_namespace']}/{plan['name']}",
+                True,
+                f"applied {plan['image']} to {plan['cluster_namespace']}/{plan['name']}; service at {url}",
                 reason="Applied",
+                service_url=url,
             )
         if ready >= replicas > 0:
             return _condition(
                 True,
-                f"applied {plan['image']} to {plan['cluster_namespace']}/{plan['name']} ({ready}/{replicas} ready)",
+                f"applied {plan['image']} to {plan['cluster_namespace']}/{plan['name']} "
+                f"({ready}/{replicas} ready); service at {url}",
+                service_url=url,
             )
         return _condition(
             False,
-            f"rollout in progress ({max(ready, 0)}/{replicas} ready)",
+            f"rollout in progress ({max(ready, 0)}/{replicas} ready); service at {url}",
             reason="Progressing",
+            service_url=url,
         )
 
     async def remove(self, plan: DeploymentPlan) -> dict:

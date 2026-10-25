@@ -252,6 +252,49 @@ async def get_resource(
     return items[0]
 
 
+@router.get("/{kind}/{namespace}/{name}/content")
+async def get_skill_content(
+    kind: str,
+    namespace: str,
+    name: str,
+    tag: str | None = None,
+    user: models.User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """The skill's pinned tree as a gzipped tarball (registry-side fetch
+    with the owner's credentials — this is how subscribers of private
+    repositories get the bytes). Requires normal read access."""
+    kind_n = resource_service.normalize_kind(kind)
+    if kind_n != "Skill":
+        raise err_mod.ValidationError("content download is only available for Skill resources")
+    resource, rv = await resource_service.get_resource(
+        session, user, kind, namespace, name, tag=tag
+    )
+    if rv is None:
+        raise err_mod.ValidationError("skill has no published version to fetch")
+    from agentrum.services import skill_content_service
+
+    blob, sha = await skill_content_service.build_tarball(session, resource, rv)
+    await audit_mod.record(
+        session,
+        actor=user,
+        action="skill.content_download",
+        kind=kind_n,
+        namespace=resource.namespace,
+        name=resource.name,
+        detail={"sha": sha[:12], "tag": tag},
+    )
+    await session.commit()
+    return Response(
+        content=blob,
+        media_type="application/gzip",
+        headers={
+            "X-Agentrum-Sha": sha,
+            "Content-Disposition": f'attachment; filename="skill-{name}-{sha[:12]}.tar.gz"',
+        },
+    )
+
+
 @router.get("/{kind}/{namespace}/{name}/connect")
 async def get_connection(
     kind: str,

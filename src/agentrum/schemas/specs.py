@@ -59,11 +59,18 @@ class AgentSpec(BaseSpec):
 
     image: str
     env: list[EnvVar] = []
+    # Where a consumer reaches this agent when it is hosted outside the
+    # registry's deployment controller (self-managed clusters, SaaS agents).
+    # Workloads deployed through the Deployment kind get their in-cluster
+    # service URL written back as a Ready condition instead.
+    endpoint: HttpUrl | None = None
     # Catalog/interop metadata (all optional — the image is the contract).
     framework: str | None = None  # langgraph / crewai / adk / ...
     protocol: Literal["mcp", "a2a", "openapi", "http", "custom"] | None = None
     # A2A agent card (/.well-known/agent.json) when the agent speaks A2A.
     agent_card_url: HttpUrl | None = None
+    # OpenAPI document describing the agent's HTTP API (protocol: openapi).
+    openapi_url: HttpUrl | None = None
     capabilities: list[str] = []
 
     @model_validator(mode="after")
@@ -75,9 +82,11 @@ class AgentSpec(BaseSpec):
         return self
 
     @model_validator(mode="after")
-    def _a2a_needs_card(self) -> "AgentSpec":
+    def _protocol_needs_its_contract(self) -> "AgentSpec":
         if self.protocol == "a2a" and not self.agent_card_url:
             raise ValueError("protocol 'a2a' requires agent_card_url")
+        if self.protocol == "openapi" and not self.openapi_url:
+            raise ValueError("protocol 'openapi' requires openapi_url")
         return self
 
 

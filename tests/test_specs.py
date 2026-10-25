@@ -45,3 +45,22 @@ def test_skill_git_source_contract():
     assert ok["source"]["git"]["ref"] == "v1"
     # inline mode still works
     assert validate_spec("Skill", {"instructions": "do"})["instructions"] == "do"
+
+
+def test_agent_endpoint_and_protocol_contracts():
+    # Externally-hosted agents can declare where consumers reach them.
+    spec = validate_spec(
+        "Agent",
+        {"image": "ghcr.io/acme/agent:v1", "endpoint": "https://agents.acme.internal/pay"},
+    )
+    assert spec["endpoint"] == "https://agents.acme.internal/pay"
+
+    # openapi agents must point at their contract document, like a2a needs
+    # its agent card.
+    with pytest.raises(errors.ValidationError):
+        validate_spec("Agent", {"image": "i:v1", "protocol": "openapi"})
+    spec = validate_spec(
+        "Agent",
+        {"image": "i:v1", "protocol": "openapi", "openapi_url": "https://x/openapi.json"},
+    )
+    assert spec["openapi_url"] == "https://x/openapi.json"

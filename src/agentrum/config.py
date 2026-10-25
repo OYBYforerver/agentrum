@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     # Skill publishing: remote git resolution gets this many seconds before
     # the request fails, so a hanging remote cannot pin a DB transaction.
     git_timeout_seconds: int = 30
+    # Content delivery: tarballs larger than this are refused (protects the
+    # pod from a maliciously huge "skill" repository).
+    skill_content_max_bytes: int = 50 * 1024 * 1024
 
     # Probes & maintenance
     probe_interval_seconds: int = 60

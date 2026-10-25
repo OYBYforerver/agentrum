@@ -86,11 +86,14 @@ async def _probe_streamable_http(
 
 
 async def probe_once(session) -> int:  # pragma: no cover - exercised via service wiring
+    # MCPServer endpoints (with the MCP handshake where applicable) and
+    # externally-hosted Agent endpoints (plain GET) both surface health as
+    # status conditions for consumers.
     rows = (
         await session.execute(
             select(models.Resource)
             .where(
-                models.Resource.kind == "MCPServer",
+                models.Resource.kind.in_(("MCPServer", "Agent")),
                 models.Resource.deleted_at.is_(None),
             )
             .order_by(models.Resource.id)  # every server gets probed, no starvation

@@ -106,3 +106,31 @@ def test_agent_spec_rejects_url_as_image():
 def test_agent_spec_accepts_normal_image():
     spec = validate_spec("Agent", {"image": "registry.internal/team/agent:1.2.3"})
     assert spec["image"] == "registry.internal/team/agent:1.2.3"
+
+
+# --- skill content delivery ---------------------------------------------------
+
+def test_subdirectory_validation_blocks_traversal():
+    import pytest
+
+    from agentrum.services.skill_content_service import _validate_subdirectory
+
+    assert _validate_subdirectory(None) == []
+    assert _validate_subdirectory("") == []
+    assert _validate_subdirectory("pack/gateway") == ["pack", "gateway"]
+    assert _validate_subdirectory("./pack/../pack/gateway") == ["pack", "gateway"]
+    for bad in ("..", "../escape", "a/../../escape", "/absolute", "//double"):
+        with pytest.raises(errors.ValidationError):
+            _validate_subdirectory(bad)
+
+
+# --- agent endpoint delivery ---------------------------------------------------
+
+def test_service_url_writeback_shape():
+    from agentrum.services.deployments.adapter import DeploymentPlan, _service_url
+
+    plan = DeploymentPlan(
+        name="pay-agent", cluster_namespace="agents", image="i:v1",
+        env={}, replicas=1, port=8000,
+    )
+    assert _service_url(plan) == "http://pay-agent.agents.svc:8000"

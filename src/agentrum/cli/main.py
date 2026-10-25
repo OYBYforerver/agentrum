@@ -213,6 +213,90 @@ def delete(
 
 
 @app.command()
+def configure(
+    client: str = typer.Option(
+        ..., "--client", help="cursor | claude-code | generic (generic prints the snippet)"
+    ),
+    server: str = typer.Option(None, help="Registry base URL (default: stored/login server)"),
+    name: str = typer.Option("agentrum", help="Entry name in the client config"),
+    output: str = typer.Option(None, help="Config file path (client default if omitted)"),
+) -> None:
+    """Write this registry into an MCP client config (read-only access).
+
+    Prefers stored AK/SK credentials; a stored console token works too but
+    expires (use `agentrum login --ak … --sk …` for a long-lived setup).
+    Existing entries in the file are preserved; only `name` is (over)written.
+    """
+    import base64
+
+    creds = _load_credentials()
+    base = (server or os.environ.get("AGENTRUM_SERVER") or creds.get("server") or "").rstrip("/")
+    if not base:
+        typer.echo(
+            "No server known. Pass --server or run: agentrum login --server <url> ...", err=True
+        )
+        raise typer.Exit(1)
+    ak = os.environ.get("AGENTRUM_AK") or creds.get("ak")
+    sk = os.environ.get("AGENTRUM_SK") or creds.get("sk")
+    token = os.environ.get("AGENTRUM_TOKEN") or creds.get("token")
+    if ak and sk:
+        auth = "Basic " + base64.b64encode(f"{ak}:{sk}".encode()).decode()
+    elif token:
+        auth = f"Bearer {token}"
+        typer.echo(
+            "note: using a console session token (expires in hours). For a long-lived "
+            "setup, log in with a project AK/SK: agentrum login --ak … --sk …"
+        )
+    else:
+        typer.echo("Not logged in. Run: agentrum login ...", err=True)
+        raise typer.Exit(1)
+
+    client_n = client.strip().lower()
+    if client_n == "cursor":
+        entry: dict = {"url": f"{base}/mcp", "headers": {"Authorization": auth}}
+        path = Path(output) if output else Path.home() / ".cursor" / "mcp.json"
+    elif client_n == "claude-code":
+        entry = {"type": "http", "url": f"{base}/mcp", "headers": {"Authorization": auth}}
+        path = Path(output) if output else Path.cwd() / ".mcp.json"
+    elif client_n == "generic":
+        typer.echo(
+            json.dumps(
+                {"mcpServers": {name: {"url": f"{base}/mcp", "headers": {"Authorization": auth}}}},
+                indent=2,
+            )
+        )
+        return
+    else:
+        typer.echo("unknown --client (use cursor | claude-code | generic)", err=True)
+        raise typer.Exit(1)
+
+    data: dict = {}
+    if path.exists():
+        try:
+            data = json.loads(path.read_text())
+        except ValueError:
+            typer.echo(f"{path} is not valid JSON — not touching it, merge manually", err=True)
+            raise typer.Exit(1)
+    servers = data.get("mcpServers")
+    if not isinstance(servers, dict):
+        servers = {}
+    action = "updated" if name in servers else "added"
+    servers[name] = entry
+    data["mcpServers"] = servers
+
+    existed = path.exists()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(json.dumps(data, indent=2))
+    os.replace(tmp, path)
+    if not existed:
+        os.chmod(path, 0o600)  # the file carries credentials
+    typer.echo(f"✔ {action} '{name}' in {path} ({base}/mcp)")
+
+
+@app.command()
 def version() -> None:
     """Show server version."""
     resp = httpx.get(f"{_server()}/health", timeout=10)
