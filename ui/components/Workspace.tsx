@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  BookOpen, Boxes, FolderOpen, Home, Link2, LogOut, Moon, Plug, Search, Settings as SettingsIcon, ShieldCheck, ScrollText,
+  BookOpen, Boxes, FolderOpen, Home, Link2, LogOut, Moon, Plug, Search, Settings as SettingsIcon, ShieldCheck, ScrollText, Users,
 } from "lucide-react";
 import { api, errMsg, getServer } from "../lib/api";
 import { setLocale } from "../lib/i18n";
@@ -15,6 +15,7 @@ import Overview from "./Overview";
 import ProjectsInline from "./ProjectsInline";
 import Settings from "./Settings";
 import Subscriptions from "./Subscriptions";
+import Admin from "./Admin";
 
 type View =
   | { tab: "projects" }
@@ -23,6 +24,7 @@ type View =
   | { tab: "subscriptions" }
   | { tab: "grants" }
   | { tab: "audit" }
+  | { tab: "admin" }
   | { tab: "settings" };
 
 export default function Workspace({
@@ -149,6 +151,12 @@ export default function Workspace({
               onClick={() => setView({ tab: "audit" })}
             >
               <ScrollText size={15} /> {t("nav.audit")}
+            </button>
+            <button
+              className={`nav-item ${view.tab === "admin" ? "active" : ""}`}
+              onClick={() => setView({ tab: "admin" })}
+            >
+              <Users size={15} /> {t("nav.adminUsers")}
             </button>
           </>
         )}
@@ -284,6 +292,8 @@ export default function Workspace({
             kind={view.kind}
             onKind={(kind) => setView({ tab: "catalog", kind })}
           />
+        ) : view.tab === "admin" ? (
+          <Admin />
         ) : view.tab === "subscriptions" ? (
           <Subscriptions project={project} />
         ) : view.tab === "grants" ? (

@@ -8,7 +8,8 @@
     "cancel": "取消",
     "delete": "删除",
     "working": "处理中…",
-    "loading": "加载中…"
+    "loading": "加载中…",
+    "create": "创建"
   },
   "login": {
     "heading": "登录",
@@ -57,7 +58,8 @@
     "group": {
       "project": "项目",
       "platform": "平台管理"
-    }
+    },
+    "adminUsers": "用户与项目"
   },
   "projects": {
     "heading": "我的项目",
@@ -291,5 +293,33 @@
     "detail": "详情",
     "sourceIp": "来源 IP",
     "loadMore": "加载更多"
+  },
+  "admin": {
+    "title": "用户与项目",
+    "subtitle": "平台级治理:账号生命周期、平台管理员授予、项目总览。所有动作均记录审计。",
+    "users": "用户",
+    "projects": "项目",
+    "createUser": "新建用户",
+    "username": "用户名",
+    "displayName": "显示名",
+    "password": "密码",
+    "platformAdmin": "平台管理员",
+    "status": "状态",
+    "actions": "操作",
+    "yes": "是",
+    "active": "启用",
+    "disabled": "已禁用",
+    "grantAdmin": "授予管理员",
+    "revokeAdmin": "回收管理员",
+    "resetPw": "重置密码",
+    "resetPwFor": "重置 {{user}} 的密码",
+    "pwResetDone": "已重置 {{user}} 的密码",
+    "enable": "启用",
+    "disable": "禁用",
+    "updated": "已更新",
+    "project": "项目",
+    "members": "成员数",
+    "empty": "暂无数据",
+    "projectsHint": "项目在此总览;创建项目请前往「我的项目」页(平台管理员可见创建入口)。"
   }
 }

@@ -8,7 +8,8 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "working": "Working…",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "create": "Create"
   },
   "login": {
     "heading": "Sign in",
@@ -57,7 +58,8 @@
     "group": {
       "project": "Project",
       "platform": "Platform"
-    }
+    },
+    "adminUsers": "Users & projects"
   },
   "projects": {
     "heading": "My projects",
@@ -291,5 +293,33 @@
     "detail": "Detail",
     "sourceIp": "Source IP",
     "loadMore": "Load more"
+  },
+  "admin": {
+    "title": "Users & projects",
+    "subtitle": "Platform governance: account lifecycle, platform-admin grants, project overview. Every action is audited.",
+    "users": "Users",
+    "projects": "Projects",
+    "createUser": "New user",
+    "username": "Username",
+    "displayName": "Display name",
+    "password": "Password",
+    "platformAdmin": "Platform admin",
+    "status": "Status",
+    "actions": "Actions",
+    "yes": "Yes",
+    "active": "Active",
+    "disabled": "Disabled",
+    "grantAdmin": "Grant admin",
+    "revokeAdmin": "Revoke admin",
+    "resetPw": "Reset password",
+    "resetPwFor": "Reset password for {{user}}",
+    "pwResetDone": "Password reset for {{user}}",
+    "enable": "Enable",
+    "disable": "Disable",
+    "updated": "Updated",
+    "project": "Project",
+    "members": "Members",
+    "empty": "Nothing here yet",
+    "projectsHint": "Projects overview; create projects from the My projects page (admins see the create button there)."
   }
 }
