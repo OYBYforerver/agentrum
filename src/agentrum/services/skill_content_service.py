@@ -7,18 +7,28 @@ access get the bytes at the locked commit. The tarball is built from git
 tree objects directly, with no working-tree checkout: subdirectory
 traversal and symlinks cannot escape the pinned tree, and submodule
 gitlinks (whose content is not in this repository) are skipped.
+
+A version's tree is immutable, so built tarballs are cached on disk keyed
+by (url, sha): repeat downloads neither re-clone the repository nor
+rebuild the archive.
 """
 
 import asyncio
+import hashlib
 import io
+import os
 import posixpath
-import socket
 import tarfile
 import tempfile
+import time
+from pathlib import Path
 
 from agentrum import errors
 from agentrum.config import get_settings
 from agentrum.db import models
+
+_CACHE_DIR = Path(tempfile.gettempdir()) / "agentrum-skill-cache"
+_CACHE_MAX_TOTAL_BYTES = 512 * 1024 * 1024
 
 
 def _validate_subdirectory(sub: str | None) -> list[str]:
@@ -31,76 +41,136 @@ def _validate_subdirectory(sub: str | None) -> list[str]:
     return [s for s in norm.split("/") if s not in ("", ".")]
 
 
+def _cache_path(url: str, sha: str) -> Path:
+    key = hashlib.sha256(f"{url}|{sha}".encode()).hexdigest()
+    return _CACHE_DIR / f"{key}.tar.gz"
+
+
+def _cache_get(url: str, sha: str, ttl_seconds: int) -> bytes | None:
+    if ttl_seconds <= 0:
+        return None
+    path = _cache_path(url, sha)
+    try:
+        if time.time() - path.stat().st_mtime > ttl_seconds:
+            return None
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def _cache_put(url: str, sha: str, blob: bytes) -> None:
+    """Best-effort store: never raise — a cache hiccup must not fail an
+    authorized download. Leftover .tmp files from crashed writes are swept."""
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        for entry in _CACHE_DIR.iterdir():
+            if entry.name.endswith(".tmp"):
+                entry.unlink(missing_ok=True)
+        path = _cache_path(url, sha)
+        tmp = path.with_suffix(".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(blob)
+        os.replace(tmp, path)
+        os.chmod(path, 0o600)
+        _prune_cache()
+    except OSError:
+        pass
+
+
+def _prune_cache() -> None:
+    """Keep the cache bounded: newest files stay, oldest go once the total
+    exceeds the cap. Failures are ignored (best-effort)."""
+    try:
+        entries = []
+        for entry in _CACHE_DIR.iterdir():
+            if not entry.is_file():
+                continue
+            st = entry.stat()
+            entries.append((st.st_mtime, st.st_size, entry))
+        total = sum(size for _, size, _ in entries)
+        if total <= _CACHE_MAX_TOTAL_BYTES:
+            return
+        for _, size, entry in sorted(entries):  # oldest first
+            entry.unlink(missing_ok=True)
+            total -= size
+            if total <= _CACHE_MAX_TOTAL_BYTES:
+                break
+    except OSError:
+        pass
+
+
 def _build_tarball_sync(
     url: str, sha: str, subdirectory: list[str], creds: tuple[str, str] | None, max_bytes: int
 ) -> bytes:
     from dulwich import porcelain
     from dulwich.objects import Blob, Tree
 
+    from agentrum.services.git_service import _socket_timeout
+
     settings = get_settings()
-    previous_timeout = socket.getdefaulttimeout()
-    try:
-        socket.setdefaulttimeout(settings.git_timeout_seconds)
-        kwargs: dict = {}
-        if creds:
-            kwargs = {"username": creds[0] or None, "password": creds[1]}
-        buf = io.BytesIO()
-        with tempfile.TemporaryDirectory(prefix="agentrum-skill-content-") as tmp:
-            repo = porcelain.clone(url, tmp, checkout=False, **kwargs)
-            store = repo.object_store
-            try:
-                commit = store[sha.encode()]
-            except KeyError:
+    kwargs: dict = {}
+    if creds:
+        kwargs = {"username": creds[0] or None, "password": creds[1]}
+    buf = io.BytesIO()
+    # The process-global socket timeout is set/restored under a lock (see
+    # git_service._socket_timeout) so concurrent fetches cannot leak it.
+    with _socket_timeout(settings.git_timeout_seconds), tempfile.TemporaryDirectory(
+        prefix="agentrum-skill-content-"
+    ) as tmp:
+        repo = porcelain.clone(url, tmp, checkout=False, **kwargs)
+        store = repo.object_store
+        try:
+            commit = store[sha.encode()]
+        except KeyError:
+            raise errors.ValidationError(
+                f"commit {sha[:12]} not found in the skill's source repository"
+            ) from None
+        tree: Tree = store[commit.tree]
+
+        for segment in subdirectory:
+            entry = next((e for e in tree.items() if e.path.decode() == segment), None)
+            if entry is None:
                 raise errors.ValidationError(
-                    f"commit {sha[:12]} not found in the skill's source repository"
-                ) from None
-            tree: Tree = store[commit.tree]
+                    f"subdirectory {('/'.join(subdirectory))!r} not found at the pinned commit"
+                )
+            obj = store[entry.sha]
+            if not isinstance(obj, Tree):
+                raise errors.ValidationError(
+                    f"subdirectory path traverses a non-directory at {segment!r}"
+                )
+            tree = obj
 
-            for segment in subdirectory:
-                entry = next((e for e in tree.items() if e.path.decode() == segment), None)
-                if entry is None:
-                    raise errors.ValidationError(
-                        f"subdirectory {('/'.join(subdirectory))!r} not found at the pinned commit"
-                    )
-                obj = store[entry.sha]
-                if not isinstance(obj, Tree):
-                    raise errors.ValidationError(
-                        f"subdirectory path traverses a non-directory at {segment!r}"
-                    )
-                tree = obj
+        total = 0
 
-            total = 0
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
 
-            with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            def walk(tree: Tree, prefix: str) -> None:
+                nonlocal total
+                for entry in tree.items():
+                    path = f"{prefix}{entry.path.decode()}"
+                    obj = store[entry.sha]
+                    if isinstance(obj, Tree):
+                        info = tarfile.TarInfo(path)
+                        info.type = tarfile.DIRTYPE
+                        info.mode = 0o755
+                        tar.addfile(info)
+                        walk(obj, f"{path}/")
+                    elif isinstance(obj, Blob):
+                        data = obj.data
+                        total += len(data)
+                        if total > max_bytes:
+                            raise errors.ValidationError(
+                                f"skill content exceeds the {max_bytes // (1024 * 1024)} MiB cap"
+                            )
+                        info = tarfile.TarInfo(path)
+                        info.size = len(data)
+                        info.mode = 0o755 if entry.mode & 0o111 else 0o644
+                        tar.addfile(info, io.BytesIO(data))
+                    # gitlinks (submodules) are skipped: the pinned tree
+                    # does not contain their content.
 
-                def walk(tree: Tree, prefix: str) -> None:
-                    nonlocal total
-                    for entry in tree.items():
-                        path = f"{prefix}{entry.path.decode()}"
-                        obj = store[entry.sha]
-                        if isinstance(obj, Tree):
-                            info = tarfile.TarInfo(path)
-                            info.type = tarfile.DIRTYPE
-                            info.mode = 0o755
-                            tar.addfile(info)
-                            walk(obj, f"{path}/")
-                        elif isinstance(obj, Blob):
-                            data = obj.data
-                            total += len(data)
-                            if total > max_bytes:
-                                raise errors.ValidationError(
-                                    f"skill content exceeds the {max_bytes // (1024 * 1024)} MiB cap"
-                                )
-                            info = tarfile.TarInfo(path)
-                            info.size = len(data)
-                            info.mode = 0o755 if entry.mode & 0o111 else 0o644
-                            tar.addfile(info, io.BytesIO(data))
-                        # gitlinks (submodules) are skipped: the pinned tree
-                        # does not contain their content.
-
-                walk(tree, "")
-    finally:
-        socket.setdefaulttimeout(previous_timeout)
+            walk(tree, "")
     return buf.getvalue()
 
 
@@ -129,6 +199,12 @@ async def build_tarball(
     creds = await _credentials_for(session, resource.namespace, git.get("credentials_ref"))
     subdirectory = _validate_subdirectory(git.get("subdirectory"))
     settings = get_settings()
+
+    # A version's tree is immutable — a fresh cache hit skips the clone.
+    cached = _cache_get(url, sha, settings.skill_content_cache_seconds)
+    if cached is not None:
+        return cached, sha
+
     try:
         blob = await asyncio.wait_for(
             asyncio.to_thread(
@@ -140,4 +216,5 @@ async def build_tarball(
         raise
     except Exception as exc:
         raise errors.ValidationError(f"cannot fetch skill content: {redact(exc)}") from exc
+    _cache_put(url, sha, blob)
     return blob, sha

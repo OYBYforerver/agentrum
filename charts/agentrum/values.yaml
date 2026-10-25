@@ -70,6 +70,16 @@ observability:
   otelEndpoint: ""
 
 resources: {}
+# The bundled image runs as uid 10001 (non-root), so runAsNonRoot is safe by
+# default; override when running a custom image that needs root.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
 nodeSelector: {}
 tolerations: []
 affinity:

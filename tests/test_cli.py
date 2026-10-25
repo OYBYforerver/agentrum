@@ -51,7 +51,22 @@ def test_configure_cursor_writes_and_merges(stored_ak_sk, tmp_path, monkeypatch)
     data = json.loads(existing.read_text())
     assert data["mcpServers"]["other"] == {"url": "http://x"}  # untouched
     assert data["mcpServers"]["agentrum"]["url"] == "https://registry.internal/mcp"
-    # existing file keeps its permissions; mode unchanged is fine
+
+
+def test_configure_tightens_perms_on_existing_world_readable_file(
+    stored_ak_sk, tmp_path, monkeypatch
+):
+    """A pre-existing 0644 config (Cursor-managed, or repo-tracked .mcp.json)
+    must not keep carrying our credentials world-readable."""
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / ".mcp.json"
+    existing.write_text(json.dumps({"mcpServers": {}}))
+    existing.chmod(0o644)
+
+    result = _run("--client", "claude-code")
+    assert result.exit_code == 0, result.output
+    mode = stat.S_IMODE(existing.stat().st_mode)
+    assert mode == 0o600
 
 
 def test_configure_claude_code_creates_private_file(stored_ak_sk, tmp_path, monkeypatch):

@@ -267,6 +267,13 @@ async def remove_member(
     member = await session.get(models.TeamMember, (team.id, user.id))
     if member is None:
         raise errors.NotFoundError(f"user {username!r} is not a member of team {team.name!r}")
+    if team.owner_user_id == user.id:
+        # owner_user_id is the transfer-of-ownership anchor: leaving it
+        # dangling on a non-member would let a removed owner transfer the
+        # team (and its admin seat) back to themselves.
+        raise errors.ConflictError(
+            f"user {username!r} owns team {team.name!r}; transfer ownership before removing them"
+        )
     if member.role == models.ROLE_ADMIN:
         await _ensure_not_last_admin(session, team)
     await session.delete(member)
@@ -278,6 +285,12 @@ async def remove_member(
 
 
 async def _ensure_not_last_admin(session: AsyncSession, team: models.Team) -> None:
+    # Row lock on the team, held until the caller's commit: two concurrent
+    # demotions/removals on the same team serialize here instead of both
+    # passing the count and leaving the team admin-less.
+    await session.execute(
+        select(models.Team).where(models.Team.id == team.id).with_for_update()
+    )
     admins = (
         await session.execute(
             select(func.count())

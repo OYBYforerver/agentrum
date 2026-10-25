@@ -143,7 +143,7 @@ async def patch_user(
             "disabled": body.disabled,
             "is_platform_admin": body.is_platform_admin,
         },
-        source_ip=request.client.host if request.client else None,
+        source_ip=client_ip(request),
     )
     await session.commit()
     await session.refresh(user)

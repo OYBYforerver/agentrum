@@ -64,20 +64,22 @@ export default function ProjectsInline({
           .then(setUsers)
           .catch(() => {});
       }
-      for (const tm of teams) {
-        try {
-          const stats = await api<Stats>(`/v1/teams/${tm.name}/stats`);
-          const activity = await api<{ occurred_at: string }[]>(
-            `/v1/teams/${tm.name}/activity?limit=1`
-          );
-          setMeta((old) => ({
-            ...old,
-            [tm.name]: { stats, lastActivity: activity[0]?.occurred_at },
-          }));
-        } catch {
-          setMeta((old) => ({ ...old, [tm.name]: {} }));
-        }
-      }
+      await Promise.all(
+        teams.map(async (tm) => {
+          try {
+            const [stats, activity] = await Promise.all([
+              api<Stats>(`/v1/teams/${tm.name}/stats`),
+              api<{ occurred_at: string }[]>(`/v1/teams/${tm.name}/activity?limit=1`),
+            ]);
+            setMeta((old) => ({
+              ...old,
+              [tm.name]: { stats, lastActivity: activity[0]?.occurred_at },
+            }));
+          } catch {
+            setMeta((old) => ({ ...old, [tm.name]: {} }));
+          }
+        })
+      );
     } catch (e) {
       setError(errMsg(e));
     }

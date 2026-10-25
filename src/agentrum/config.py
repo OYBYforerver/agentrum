@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     # Content delivery: tarballs larger than this are refused (protects the
     # pod from a maliciously huge "skill" repository).
     skill_content_max_bytes: int = 50 * 1024 * 1024
+    # Disk cache TTL for built tarballs keyed by (git url, pinned sha) — the
+    # content of a version is immutable, so repeat downloads skip the clone.
+    # 0 disables the cache.
+    skill_content_cache_seconds: int = 600
 
     # Probes & maintenance
     probe_interval_seconds: int = 60

@@ -1,13 +1,14 @@
 """Unit tests for the security fixes: git ref resolution, credential
-redaction, image allowlist boundaries, reconciler condition comparison,
+redaction, image allowlist boundaries, condition merge semantics,
 deployment spec hardening."""
 
 import pytest
 
 from agentrum import errors
 from agentrum.schemas.specs import validate_spec
+from agentrum.services.conditions import merge_condition
 from agentrum.services.deployments.allowlist import image_allowed
-from agentrum.services.deployments.reconciler import _condition, _conditions_equal
+from agentrum.services.deployments.reconciler import _condition
 from agentrum.services.git_service import _pick_ref, redact
 
 # --- git ref resolution -------------------------------------------------------
@@ -62,17 +63,35 @@ def test_allowlist_empty_is_permissive():
     assert image_allowed("docker.io/anything", [])
 
 
-# --- reconciler condition comparison -----------------------------------------
+# --- condition merge semantics -------------------------------------------------
 
-def test_conditions_equal_ignores_timestamp():
-    a = _condition(True, "applied")
-    b = _condition(True, "applied")
-    assert a["last_transition"] != b["last_transition"] or True  # timing
-    assert _conditions_equal(a, b)
+class _Row:
+    """Minimal stand-in for models.Resource (status dict only)."""
+
+    def __init__(self, status=None):
+        self.status = status
 
 
-def test_conditions_differ_on_message():
-    assert not _conditions_equal(_condition(True, "applied"), _condition(False, "failed"))
+def test_merge_condition_preserves_other_types():
+    row = _Row({"conditions": [{"type": "UpstreamDrift", "status": "True"}]})
+    changed = merge_condition(row, _condition(True, "applied"))
+    types = [c["type"] for c in row.status["conditions"]]
+    assert changed is True
+    assert "UpstreamDrift" in types and "Ready" in types
+
+
+def test_merge_condition_upserts_same_type():
+    row = _Row({"conditions": [{"type": "Ready", "status": "False", "message": "down"}]})
+    merge_condition(row, _condition(True, "up"))
+    ready = [c for c in row.status["conditions"] if c["type"] == "Ready"]
+    assert len(ready) == 1 and ready[0]["message"] == "up"
+
+
+def test_merge_condition_ignores_volatile_timestamps():
+    row = _Row({"conditions": [_condition(True, "applied")]})
+    again = _condition(True, "applied")  # fresh last_transition
+    assert merge_condition(row, again) is False
+    assert merge_condition(row, _condition(True, "changed message")) is True
 
 
 # --- deployment spec hardening -----------------------------------------------

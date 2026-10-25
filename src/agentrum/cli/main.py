@@ -284,15 +284,15 @@ def configure(
     servers[name] = entry
     data["mcpServers"] = servers
 
-    existed = path.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as fh:
         fh.write(json.dumps(data, indent=2))
     os.replace(tmp, path)
-    if not existed:
-        os.chmod(path, 0o600)  # the file carries credentials
+    # The file carries credentials — tighten unconditionally: a pre-existing
+    # config (Cursor's, or a repo-tracked .mcp.json) may well be world-readable.
+    os.chmod(path, 0o600)
     typer.echo(f"✔ {action} '{name}' in {path} ({base}/mcp)")
 
 

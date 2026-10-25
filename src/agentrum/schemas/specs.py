@@ -187,6 +187,9 @@ class DeploymentSpec(BaseSpec):
     runtime: Literal["kubernetes"] = "kubernetes"
     image_pull_policy: Literal["IfNotPresent", "Always", "Never"] = "IfNotPresent"
     port: int = Field(default=8000, ge=1, le=65535)
+    # Opt into runAsNonRoot for images known to run as a non-root user; the
+    # reconciler always applies seccomp/no-privilege-escalation regardless.
+    run_as_non_root: bool | None = None
 
     @model_validator(mode="after")
     def _sane_cluster_namespace(self) -> "DeploymentSpec":

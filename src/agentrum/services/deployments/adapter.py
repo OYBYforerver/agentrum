@@ -69,6 +69,43 @@ def _secret_name(plan_name: str) -> str:
     return f"{_container_name(plan_name)}-env"
 
 
+def build_container(plan: DeploymentPlan, env_secret: str | None):
+    """Container for one plan. Baseline hardening is unconditional
+    (no privilege escalation, all capabilities dropped) — safe for any
+    image; runAsNonRoot is opt-in via the spec since root-based images
+    would otherwise fail to start."""
+    from kubernetes_asyncio import client
+
+    return client.V1Container(
+        name=_container_name(plan["name"]),
+        image=plan["image"],
+        image_pull_policy=plan.get("image_pull_policy", "IfNotPresent"),
+        env_from=(
+            [client.V1EnvFromSource(secret_ref=client.V1SecretEnvSource(name=env_secret))]
+            if env_secret
+            else None
+        ),
+        ports=[client.V1ContainerPort(container_port=plan.get("port", 8000))],
+        security_context=client.V1SecurityContext(
+            allow_privilege_escalation=False,
+            capabilities=client.V1Capabilities(drop=["ALL"]),
+        ),
+    )
+
+
+def build_pod_spec(plan: DeploymentPlan, container):
+    from kubernetes_asyncio import client
+
+    return client.V1PodSpec(
+        containers=[container],
+        service_account_name=plan.get("service_account") or None,
+        security_context=client.V1PodSecurityContext(
+            run_as_non_root=plan.get("run_as_non_root") or None,
+            seccomp_profile=client.V1SeccompProfile(type="RuntimeDefault"),
+        ),
+    )
+
+
 class KubernetesAdapter:
     """Native Kubernetes runtime (no kagent dependency)."""
 
@@ -125,27 +162,9 @@ class KubernetesAdapter:
         core = client.CoreV1Api()
         labels = self._labels(plan)
         selector = {"matchLabels": {"app.kubernetes.io/name": plan["name"]}}
-        container_name = _container_name(plan["name"])
         env_secret = await self._apply_env_secret(core, plan)
-        container = client.V1Container(
-            name=container_name,
-            image=plan["image"],
-            image_pull_policy=plan.get("image_pull_policy", "IfNotPresent"),
-            env_from=(
-                [
-                    client.V1EnvFromSource(
-                        secret_ref=client.V1SecretEnvSource(name=env_secret)
-                    )
-                ]
-                if env_secret
-                else None
-            ),
-            ports=[client.V1ContainerPort(container_port=plan.get("port", 8000))],
-        )
-        pod_spec = client.V1PodSpec(
-            containers=[container],
-            service_account_name=plan.get("service_account") or None,
-        )
+        container = build_container(plan, env_secret)
+        pod_spec = build_pod_spec(plan, container)
         body = client.V1Deployment(
             metadata=client.V1ObjectMeta(
                 name=plan["name"], namespace=plan["cluster_namespace"], labels=labels

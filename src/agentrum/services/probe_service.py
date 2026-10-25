@@ -19,6 +19,7 @@ from agentrum import __version__
 from agentrum.config import get_settings
 from agentrum.db import models
 from agentrum.db.engine import SessionLocal
+from agentrum.services.conditions import merge_condition
 
 logger = logging.getLogger("agentrum.probe")
 
@@ -169,8 +170,7 @@ async def probe_once(session) -> int:  # pragma: no cover - exercised via servic
     for resource, condition in results:
         if condition is None:
             continue
-        if (resource.status or {}).get("conditions") != [condition]:
-            resource.status = {"conditions": [condition]}
+        merge_condition(resource, condition)
     await session.commit()
     return len(results)
 

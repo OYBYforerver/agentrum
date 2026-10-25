@@ -10,7 +10,8 @@ import asyncio
 import logging
 import re
 import socket
-from contextlib import suppress
+import threading
+from contextlib import contextmanager, suppress
 from urllib.parse import urlparse
 
 from sqlalchemy import select
@@ -21,6 +22,7 @@ from agentrum.config import get_settings
 from agentrum.db import models
 from agentrum.db.engine import SessionLocal
 from agentrum.services import secret_service
+from agentrum.services.conditions import merge_condition
 
 logger = logging.getLogger("agentrum.git")
 
@@ -30,6 +32,25 @@ _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 # lives inside the immutable version's spec (JSONB), and skills are meant
 # to be small instruction files.
 _MAX_ENTRYPOINT_BYTES = 256 * 1024
+
+# dulwich has no timeout parameter of its own, so the fetches below lean on
+# socket.setdefaulttimeout — which is PROCESS-GLOBAL, not thread-local.
+# Concurrent fetches would interleave capture/restore and leak a stale
+# default timeout onto every other socket in the process. Holding one lock
+# across the capture/restore window serializes the fetches and keeps the
+# restore correct.
+_SOCKET_TIMEOUT_LOCK = threading.Lock()
+
+
+@contextmanager
+def _socket_timeout(seconds: float):
+    with _SOCKET_TIMEOUT_LOCK:
+        previous = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(seconds)
+        try:
+            yield
+        finally:
+            socket.setdefaulttimeout(previous)
 
 
 def parse_frontmatter(content: str) -> tuple[dict, str]:
@@ -66,37 +87,34 @@ def _snapshot_entrypoint_sync(
     from dulwich import porcelain
     from dulwich.objects import Blob, Tree
 
-    previous_timeout = socket.getdefaulttimeout()
-    try:
-        socket.setdefaulttimeout(get_settings().git_timeout_seconds)
-        kwargs: dict = {}
-        if creds:
-            kwargs = {"username": creds[0] or None, "password": creds[1]}
-        with tempfile.TemporaryDirectory(prefix="agentrum-skill-") as tmp:
-            repo = porcelain.clone(url, tmp, checkout=False, **kwargs)
-            store = repo.object_store
-            tree: Tree = store[store[sha.encode()].tree]
-            segments = [s for s in posixpath.normpath(path).split("/") if s not in ("", ".")]
-            data: bytes | None = None
-            for i, segment in enumerate(segments):
-                entry = next((e for e in tree.items() if e.path.decode() == segment), None)
-                if entry is None:
+    kwargs: dict = {}
+    if creds:
+        kwargs = {"username": creds[0] or None, "password": creds[1]}
+    with _socket_timeout(get_settings().git_timeout_seconds), tempfile.TemporaryDirectory(
+        prefix="agentrum-skill-"
+    ) as tmp:
+        repo = porcelain.clone(url, tmp, checkout=False, **kwargs)
+        store = repo.object_store
+        tree: Tree = store[store[sha.encode()].tree]
+        segments = [s for s in posixpath.normpath(path).split("/") if s not in ("", ".")]
+        data: bytes | None = None
+        for i, segment in enumerate(segments):
+            entry = next((e for e in tree.items() if e.path.decode() == segment), None)
+            if entry is None:
+                raise errors.ValidationError(
+                    f"entrypoint {path!r} not found in the repository at the pinned commit"
+                )
+            obj = store[entry.sha]
+            if i == len(segments) - 1:
+                if not isinstance(obj, Blob):
+                    raise errors.ValidationError(f"entrypoint {path!r} is not a file")
+                data = obj.data
+            else:
+                if not isinstance(obj, Tree):
                     raise errors.ValidationError(
-                        f"entrypoint {path!r} not found in the repository at the pinned commit"
+                        f"entrypoint path {path!r} traverses a non-directory"
                     )
-                obj = store[entry.sha]
-                if i == len(segments) - 1:
-                    if not isinstance(obj, Blob):
-                        raise errors.ValidationError(f"entrypoint {path!r} is not a file")
-                    data = obj.data
-                else:
-                    if not isinstance(obj, Tree):
-                        raise errors.ValidationError(
-                            f"entrypoint path {path!r} traverses a non-directory"
-                        )
-                    tree = obj
-    finally:
-        socket.setdefaulttimeout(previous_timeout)
+                tree = obj
     assert data is not None
     if len(data) > _MAX_ENTRYPOINT_BYTES:
         raise errors.ValidationError(
@@ -114,17 +132,14 @@ def redact(text: str) -> str:
 def _ls_remote_sync(url: str, ref: str, creds: tuple[str, str] | None) -> str:
     from dulwich import porcelain
 
-    # Bound the socket wait; dulwich itself has no timeout parameter. Applies
-    # to sockets created on this thread only (restored right after).
-    previous_timeout = socket.getdefaulttimeout()
-    try:
-        socket.setdefaulttimeout(get_settings().git_timeout_seconds)
-        kwargs = {}
-        if creds:
-            kwargs = {"username": creds[0] or None, "password": creds[1]}
+    # Bound the socket wait; dulwich itself has no timeout parameter. The
+    # process-global default is set/restored under _SOCKET_TIMEOUT_LOCK so
+    # concurrent fetches cannot leak a stale value.
+    kwargs = {}
+    if creds:
+        kwargs = {"username": creds[0] or None, "password": creds[1]}
+    with _socket_timeout(get_settings().git_timeout_seconds):
         result = porcelain.ls_remote(url, **kwargs)
-    finally:
-        socket.setdefaulttimeout(previous_timeout)
     # result.refs maps refname (bytes) -> sha (bytes); `.refs` is the current
     # dulwich API (dict-style access on the result is deprecated).
     refs = result.refs
@@ -314,22 +329,11 @@ async def check_drift_once(session: AsyncSession) -> int:
                 else f"upstream matches {upstream[:8]}"
             ),
         }
-        _merge_condition(resource, condition)
+        merge_condition(resource, condition)
         # Commit per resource: a hang or failure on one skill must not hold a
         # transaction (or lose the results) for every other skill.
         await session.commit()
     return checked
-
-
-def _merge_condition(resource: models.Resource, condition: dict) -> None:
-    """Upsert one condition by type, preserving conditions written by others
-    (probe health, reconcile state, ...)."""
-    status = dict(resource.status or {})
-    conditions = [dict(c) for c in status.get("conditions", []) if c.get("type")]
-    conditions = [c for c in conditions if c["type"] != condition["type"]]
-    conditions.append(condition)
-    status["conditions"] = conditions
-    resource.status = status
 
 
 async def run_forever() -> None:  # pragma: no cover - background loop

@@ -15,11 +15,13 @@ spec:
         app.kubernetes.io/name: agentrum
     spec:
       serviceAccountName: {{ include "agentrum.fullname" . }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
         # Migrations run once per rollout; app pods never race on alembic.
         - name: migrate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           command: ["alembic", "upgrade", "head"]
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:
             - name: ARK_DATABASE_URL
               valueFrom:
@@ -29,6 +31,7 @@ spec:
       containers:
         - name: server
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - name: http
               containerPort: 8080
