@@ -3,42 +3,27 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  BookOpen, Bot, Boxes, FileText, Home, Link2, LogOut, Moon, Plug, Search, Server, Settings as SettingsIcon, ShieldCheck, Zap,
-  ScrollText,
+  BookOpen, Boxes, FolderOpen, Home, Link2, LogOut, Moon, Plug, Search, Settings as SettingsIcon, ShieldCheck, ScrollText,
 } from "lucide-react";
 import { api, errMsg, getServer } from "../lib/api";
 import { setLocale } from "../lib/i18n";
 import { toggleTheme } from "../lib/theme";
+import Audit from "./Audit";
+import Catalog, { type CatalogKind } from "./Catalog";
 import Grants from "./Grants";
 import Overview from "./Overview";
 import ProjectsInline from "./ProjectsInline";
-import ResourceTab from "./ResourceTab";
-import Audit from "./Audit";
 import Settings from "./Settings";
 import Subscriptions from "./Subscriptions";
 
 type View =
-  | { tab: "overview" }
   | { tab: "projects" }
-  | { tab: "MCP Servers" }
-  | { tab: "Agents" }
-  | { tab: "Skills" }
-  | { tab: "Prompts" }
+  | { tab: "overview" }
+  | { tab: "catalog"; kind: CatalogKind }
   | { tab: "subscriptions" }
   | { tab: "grants" }
   | { tab: "audit" }
   | { tab: "settings" };
-
-const RESOURCE_TABS: {
-  id: "MCP Servers" | "Agents" | "Skills" | "Prompts";
-  icon: typeof Server;
-  kindKey: "mcp" | "agents" | "skills" | "prompts";
-}[] = [
-  { id: "MCP Servers", icon: Server, kindKey: "mcp" },
-  { id: "Agents", icon: Bot, kindKey: "agents" },
-  { id: "Skills", icon: Zap, kindKey: "skills" },
-  { id: "Prompts", icon: FileText, kindKey: "prompts" },
-];
 
 export default function Workspace({
   project,
@@ -94,17 +79,6 @@ export default function Workspace({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  const kindOf =
-    view.tab === "MCP Servers"
-      ? "MCPServer"
-      : view.tab === "Agents"
-        ? "Agent"
-        : view.tab === "Skills"
-          ? "Skill"
-          : view.tab === "Prompts"
-            ? "Prompt"
-            : null;
-
   useEffect(() => {
     void api<{ is_platform_admin: boolean }>("/v1/auth/me")
       .then((me) => setIsAdmin(Boolean(me?.is_platform_admin)))
@@ -136,24 +110,19 @@ export default function Workspace({
         >
           <Home size={15} /> {t("nav.myProjects")}
         </button>
+        <div className="nav-section">{t("nav.group.project")}</div>
         <button
           className={`nav-item ${view.tab === "overview" ? "active" : ""}`}
           onClick={() => setView({ tab: "overview" })}
         >
           <Boxes size={15} /> {t("overview.nav")}
         </button>
-        {RESOURCE_TABS.map((rt) => {
-          const Icon = rt.icon;
-          return (
-            <button
-              key={rt.id}
-              className={`nav-item ${view.tab === rt.id ? "active" : ""}`}
-              onClick={() => setView({ tab: rt.id } as View)}
-            >
-              <Icon size={15} /> {t(`nav.kinds.${rt.kindKey}`)}
-            </button>
-          );
-        })}
+        <button
+          className={`nav-item ${view.tab === "catalog" ? "active" : ""}`}
+          onClick={() => setView({ tab: "catalog", kind: "MCPServer" })}
+        >
+          <FolderOpen size={15} /> {t("nav.catalog")}
+        </button>
         <button
           className={`nav-item ${view.tab === "subscriptions" ? "active" : ""}`}
           onClick={() => setView({ tab: "subscriptions" })}
@@ -166,20 +135,23 @@ export default function Workspace({
         >
           <ShieldCheck size={15} /> {t("nav.grants")}
         </button>
-        {isAdmin && (
-          <button
-            className={`nav-item ${view.tab === "audit" ? "active" : ""}`}
-            onClick={() => setView({ tab: "audit" })}
-          >
-            <ScrollText size={15} /> {t("nav.audit")}
-          </button>
-        )}
         <button
           className={`nav-item ${view.tab === "settings" ? "active" : ""}`}
           onClick={() => setView({ tab: "settings" })}
         >
           <SettingsIcon size={15} /> {t("nav.settings")}
         </button>
+        {isAdmin && (
+          <>
+            <div className="nav-section">{t("nav.group.platform")}</div>
+            <button
+              className={`nav-item ${view.tab === "audit" ? "active" : ""}`}
+              onClick={() => setView({ tab: "audit" })}
+            >
+              <ScrollText size={15} /> {t("nav.audit")}
+            </button>
+          </>
+        )}
         <div className="spacer" />
         <div className="userbox">
           <a className="nav-item" href={`${getServer()}/handbook/`} target="_blank" rel="noreferrer">
@@ -250,14 +222,9 @@ export default function Workspace({
                     key={r.ref}
                     className="combo-item"
                     onMouseDown={() => {
-                      const map: Record<string, string> = {
-                        MCPServer: "MCP Servers",
-                        Agent: "Agents",
-                        Skill: "Skills",
-                        Prompt: "Prompts",
-                      };
-                      if (r.namespace === project && map[r.kind]) {
-                        setView({ tab: map[r.kind] } as View);
+                      const kinds = ["MCPServer", "Agent", "Skill", "Prompt"];
+                      if (r.namespace === project && kinds.includes(r.kind)) {
+                        setView({ tab: "catalog", kind: r.kind as CatalogKind });
                       }
                       setSearchOpen(false);
                       setQuery("");
@@ -279,18 +246,18 @@ export default function Workspace({
         <h2 className="page">
           {view.tab === "overview"
             ? t("overview.nav")
-            : view.tab === "subscriptions"
-              ? t("subs.mine")
-              : view.tab === "grants"
-                ? t("nav.grants")
-              : view.tab === "settings"
-                ? t("nav.settings")
-                : RESOURCE_TABS.find((rt) => rt.id === view.tab)?.kindKey
-                  ? t(`nav.kinds.${RESOURCE_TABS.find((rt) => rt.id === view.tab)?.kindKey}`)
-                  : String(view.tab)}
-          {kindOf && (
+            : view.tab === "catalog"
+              ? t("nav.catalog")
+              : view.tab === "subscriptions"
+                ? t("subs.mine")
+                : view.tab === "grants"
+                  ? t("nav.grants")
+                  : view.tab === "settings"
+                    ? t("nav.settings")
+                    : String(view.tab)}
+          {view.tab === "catalog" && (
             <span className="muted" style={{ fontSize: 13, marginLeft: 10, fontWeight: 400 }}>
-              {kindOf}
+              {view.kind}
             </span>
           )}
         </h2>
@@ -305,9 +272,18 @@ export default function Workspace({
             }}
           />
         ) : view.tab === "overview" ? (
-          <Overview project={project} onOpen={(tab) => setView({ tab } as View)} />
-        ) : kindOf ? (
-          <ResourceTab kind={kindOf} namespace={project} />
+          <Overview
+            project={project}
+            onOpen={(tab, kind) =>
+              setView(tab === "catalog" ? { tab: "catalog", kind: kind ?? "MCPServer" } : { tab })
+            }
+          />
+        ) : view.tab === "catalog" ? (
+          <Catalog
+            project={project}
+            kind={view.kind}
+            onKind={(kind) => setView({ tab: "catalog", kind })}
+          />
         ) : view.tab === "subscriptions" ? (
           <Subscriptions project={project} />
         ) : view.tab === "grants" ? (

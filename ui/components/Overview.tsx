@@ -21,14 +21,17 @@ interface Stats {
   pending_approvals: number;
 }
 
-const KIND_ORDER = ["MCPServer", "Agent", "Skill", "Prompt"];
+const KIND_ORDER: ("MCPServer" | "Agent" | "Skill" | "Prompt")[] = ["MCPServer", "Agent", "Skill", "Prompt"];
 
 export default function Overview({
   project,
   onOpen,
 }: {
   project: string;
-  onOpen: (tab: "MCP Servers" | "Agents" | "Skills" | "Prompts" | "subscriptions") => void;
+  onOpen: (
+    tab: "catalog" | "subscriptions",
+    kind?: "MCPServer" | "Agent" | "Skill" | "Prompt"
+  ) => void;
 }) {
   const { t } = useTranslation();
   const [stats, setStats] = useState<Stats | null>(null);
@@ -94,17 +97,7 @@ export default function Overview({
           <div
             key={k}
             className="card proj-card"
-            onClick={() =>
-              onOpen(
-                k === "MCPServer"
-                  ? "MCP Servers"
-                  : k === "Agent"
-                    ? "Agents"
-                    : k === "Skill"
-                      ? "Skills"
-                      : "Prompts"
-              )
-            }
+            onClick={() => onOpen("catalog", k)}
           >
             <h3 style={{ margin: "0 0 6px" }}>
               {t(`nav.kinds.${{ MCPServer: "mcp", Agent: "agents", Skill: "skills", Prompt: "prompts" }[k]}`)}

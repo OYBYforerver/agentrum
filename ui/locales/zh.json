@@ -53,7 +53,11 @@
     "docs": "接入文档",
     "apiDocs": "API 文档",
     "grants": "我的授权",
-    "audit": "审计日志"
+    "audit": "审计日志",
+    "group": {
+      "project": "项目",
+      "platform": "平台管理"
+    }
   },
   "projects": {
     "heading": "我的项目",

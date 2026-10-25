@@ -78,6 +78,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .nav-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
 .nav-item.active { background: rgba(56, 130, 246, 0.18); color: #fff; box-shadow: inset 3px 0 0 var(--accent); }
 .sidebar .spacer { flex: 1; }
+.nav-section {
+  margin: 14px 8px 4px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: rgba(203, 213, 225, 0.55); user-select: none;
+}
 .sidebar .userbox { border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 12px; display: grid; gap: 8px; }
 .sidebar select { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); color: var(--sidebar-text); width: 100%; }
 
