@@ -89,6 +89,7 @@ async def create(
         namespace=data.namespace,
         name=data.name,
         events=data.events or ["new_version"],
+        pinned_tag=data.pinned_tag,
         status=status,
         requested_by=actor.id,
     )
@@ -138,6 +139,33 @@ async def approve(
         session, actor=actor, action="subscription.approve" if approved else "subscription.reject",
         kind=sub.kind, namespace=sub.namespace, name=sub.name,
         detail={"subscription": str(sub.id)}, source_ip=source_ip,
+    )
+    await session.commit()
+    await session.refresh(sub)
+    return sub
+
+
+async def set_pin(
+    session: AsyncSession, actor: models.User, sub_id: uuid.UUID,
+    pinned_tag: str | None, source_ip: str | None = None,
+) -> models.Subscription:
+    """Set or clear a subscription's version pin. Consumption-level config:
+    any member of the *subscriber* team may change it."""
+    sub = await _get_sub(session, sub_id)
+    if not actor.is_platform_admin:
+        team = await session.get(models.Team, sub.subscriber_team_id)
+        if team is None:
+            raise errors.NotFoundError("subscriber team no longer exists")
+        await team_service.require_member(session, actor, team)
+    if pinned_tag is not None:
+        pinned_tag = pinned_tag.strip()
+        if not pinned_tag or len(pinned_tag) > 63:
+            raise errors.ValidationError("pinned_tag must be 1-63 characters")
+    sub.pinned_tag = pinned_tag or None
+    await audit.record(
+        session, actor=actor, action="subscription.pin",
+        kind=sub.kind, namespace=sub.namespace, name=sub.name,
+        detail={"pinned_tag": sub.pinned_tag}, source_ip=source_ip,
     )
     await session.commit()
     await session.refresh(sub)

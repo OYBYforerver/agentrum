@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BookOpen, Bot, Boxes, FileText, Home, Link2, LogOut, Moon, Plug, Search, Server, Settings as SettingsIcon, ShieldCheck, Zap,
+  ScrollText,
 } from "lucide-react";
 import { api, errMsg, getServer } from "../lib/api";
 import { setLocale } from "../lib/i18n";
@@ -12,6 +13,7 @@ import Grants from "./Grants";
 import Overview from "./Overview";
 import ProjectsInline from "./ProjectsInline";
 import ResourceTab from "./ResourceTab";
+import Audit from "./Audit";
 import Settings from "./Settings";
 import Subscriptions from "./Subscriptions";
 
@@ -24,6 +26,7 @@ type View =
   | { tab: "Prompts" }
   | { tab: "subscriptions" }
   | { tab: "grants" }
+  | { tab: "audit" }
   | { tab: "settings" };
 
 const RESOURCE_TABS: {
@@ -48,6 +51,7 @@ export default function Workspace({
 }) {
   const { t, i18n } = useTranslation();
   const [view, setView] = useState<View>({ tab: "overview" });
+  const [isAdmin, setIsAdmin] = useState(false);
   const [allProjects, setAllProjects] = useState<string[]>([project]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{
@@ -100,6 +104,12 @@ export default function Workspace({
           : view.tab === "Prompts"
             ? "Prompt"
             : null;
+
+  useEffect(() => {
+    void api<{ is_platform_admin: boolean }>("/v1/auth/me")
+      .then((me) => setIsAdmin(Boolean(me?.is_platform_admin)))
+      .catch(() => setIsAdmin(false));
+  }, []);
 
   async function logout() {
     localStorage.removeItem("agentrum-token");
@@ -156,6 +166,14 @@ export default function Workspace({
         >
           <ShieldCheck size={15} /> {t("nav.grants")}
         </button>
+        {isAdmin && (
+          <button
+            className={`nav-item ${view.tab === "audit" ? "active" : ""}`}
+            onClick={() => setView({ tab: "audit" })}
+          >
+            <ScrollText size={15} /> {t("nav.audit")}
+          </button>
+        )}
         <button
           className={`nav-item ${view.tab === "settings" ? "active" : ""}`}
           onClick={() => setView({ tab: "settings" })}
@@ -294,6 +312,8 @@ export default function Workspace({
           <Subscriptions project={project} />
         ) : view.tab === "grants" ? (
           <Grants project={project} />
+        ) : view.tab === "audit" ? (
+          <Audit />
         ) : (
           <Settings project={project} />
         )}

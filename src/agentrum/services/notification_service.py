@@ -83,22 +83,26 @@ async def enqueue_resource_published(
     for sub, team_name in rows:
         if not _wants_published(sub):
             continue
-        session.add(
-            models.NotificationOutbox(
-                event_type="resource.published",
-                payload={
-                    "event": "resource.published",
-                    "kind": resource.kind,
-                    "namespace": resource.namespace,
-                    "name": resource.name,
-                    "version": version.version,
-                    "tag": version.tag,
-                    "subscriber_team": team_name,
-                    "published_by": publisher_name,
-                    "description": resource.description,
-                },
+        payload = {
+            "event": "resource.published",
+            "kind": resource.kind,
+            "namespace": resource.namespace,
+            "name": resource.name,
+            "version": version.version,
+            "tag": version.tag,
+            "subscriber_team": team_name,
+            "published_by": publisher_name,
+            "description": resource.description,
+        }
+        if sub.pinned_tag and sub.pinned_tag != version.tag:
+            # Tags never move: a pinned subscriber is intentionally behind,
+            # so the notice says "available" instead of implying an upgrade.
+            payload["pinned_tag"] = sub.pinned_tag
+            payload["note"] = (
+                f"new version {version.tag} available; subscriber is pinned to "
+                f"{sub.pinned_tag} (no action required unless you choose to move)"
             )
-        )
+        session.add(models.NotificationOutbox(event_type="resource.published", payload=payload))
         queued += 1
     return queued
 

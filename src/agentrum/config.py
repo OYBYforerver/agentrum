@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     probe_tls_verify: bool = True  # disable only for self-signed test endpoints
     audit_retention_days: int = 180
     notification_retention_days: int = 30
+    # Soft-deleted resources live in the recycle bin for this long; the
+    # retention prune then removes them for good (versions and secret
+    # payloads cascade at the database level).
+    resource_retention_days: int = 30
     skill_drift_interval_seconds: int = 300  # git-sourced skill upstream check (0 disables)
 
     # Egress guard for server-initiated requests (git clone/ls-remote, health

@@ -54,6 +54,19 @@ async def prune_once() -> dict[str, int]:  # pragma: no cover - exercised via wi
             & (models.NotificationOutbox.created_at < outbox_cutoff),
             models.NotificationOutbox.id,
         )
+
+        # Recycle-bin expiry: soft-deleted resources older than the retention
+        # window are purged for good. Versions and secret payloads cascade
+        # (ondelete=CASCADE); the soft-deleted window itself is the restore
+        # grace period (re-applying the same name resurrects the resource).
+        resource_cutoff = now - timedelta(days=settings.resource_retention_days)
+        summary["resources_purged"] = await _batched_delete(
+            session,
+            models.Resource,
+            models.Resource.deleted_at.is_not(None)
+            & (models.Resource.deleted_at < resource_cutoff),
+            models.Resource.id,
+        )
     if any(summary.values()):
         logger.info("retention prune: %s", summary)
     return summary

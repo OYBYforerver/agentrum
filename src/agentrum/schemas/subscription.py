@@ -13,6 +13,7 @@ class SubscriptionCreateIn(BaseModel):
     namespace: str
     name: str = "*"  # "*" subscribes to the whole namespace catalog (INTERNAL resources only)
     events: list[SubscriptionEvent] = ["new_version"]
+    pinned_tag: str | None = None  # lock consumption to one immutable tag
 
 
 class SubscriptionOut(BaseModel):
@@ -22,6 +23,7 @@ class SubscriptionOut(BaseModel):
     namespace: str
     name: str
     events: list
+    pinned_tag: str | None = None
     status: str
     requested_by: str
     approved_by: str | None = None
@@ -30,3 +32,7 @@ class SubscriptionOut(BaseModel):
 
 class SubscriptionListOut(BaseModel):
     items: list[SubscriptionOut]
+
+
+class SubscriptionPinIn(BaseModel):
+    pinned_tag: str | None = None  # null clears the pin

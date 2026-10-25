@@ -239,6 +239,10 @@ class Subscription(Base):
     namespace: Mapped[str] = mapped_column(String(63), nullable=False)
     name: Mapped[str] = mapped_column(String(253), nullable=False)
     events: Mapped[list] = mapped_column(JSONB, nullable=False, server_default='["new_version"]')
+    # Version lock for consumers: when set, publishes of other tags notify
+    # the subscriber as "new version available, you are pinned to X" instead
+    # of implying they should move.
+    pinned_tag: Mapped[str | None] = mapped_column(String(63))
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="active")
     requested_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     approved_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))

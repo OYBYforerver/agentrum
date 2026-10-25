@@ -12,6 +12,7 @@ from agentrum.schemas.subscription import (
     SubscriptionCreateIn,
     SubscriptionListOut,
     SubscriptionOut,
+    SubscriptionPinIn,
 )
 from agentrum.services import subscription_service, team_service
 
@@ -47,6 +48,7 @@ async def _serialize(session: AsyncSession, subs: list[models.Subscription]) -> 
             namespace=s.namespace,
             name=s.name,
             events=s.events or [],
+            pinned_tag=s.pinned_tag,
             status=s.status,
             requested_by=user_names.get(s.requested_by, str(s.requested_by)),
             approved_by=user_names.get(s.approved_by) if s.approved_by else None,
@@ -112,6 +114,22 @@ async def reject_subscription(
 ) -> SubscriptionOut:
     sub = await subscription_service.approve(
         session, user, _uuid_or_404(sub_id), approved=False, source_ip=_client_ip(request)
+    )
+    return (await _serialize(session, [sub]))[0]
+
+
+@router.patch("/v1/subscriptions/{sub_id}", response_model=SubscriptionOut)
+async def pin_subscription(
+    sub_id: str,
+    body: SubscriptionPinIn,
+    request: Request,
+    user: models.User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> SubscriptionOut:
+    """Set (`{"pinned_tag": "v1.2.0"}`) or clear (`{"pinned_tag": null}`) the
+    subscription's version lock."""
+    sub = await subscription_service.set_pin(
+        session, user, _uuid_or_404(sub_id), body.pinned_tag, source_ip=_client_ip(request)
     )
     return (await _serialize(session, [sub]))[0]
 

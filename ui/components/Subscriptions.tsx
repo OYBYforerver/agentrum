@@ -11,6 +11,7 @@ interface SubRow {
   namespace: string;
   name: string;
   status: string;
+  pinned_tag?: string | null;
 }
 
 interface PoolRow {
@@ -194,6 +195,11 @@ export default function Subscriptions({ project }: { project: string }) {
                   </td>
                   <td style={{ width: 130 }}>
                     <span className={`badge ${s.status}`}>{t(`subs.status.${s.status}`)}</span>
+                    {s.pinned_tag && (
+                      <span className="badge internal" title={t("subs.pinnedHint")}>
+                        📌 {s.pinned_tag}
+                      </span>
+                    )}
                   </td>
                   <td style={{ width: 90, textAlign: "right" }}>
                     {s.status !== "revoked" && (

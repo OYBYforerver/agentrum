@@ -7,7 +7,8 @@
     "ok": "确定",
     "cancel": "取消",
     "delete": "删除",
-    "working": "处理中…"
+    "working": "处理中…",
+    "loading": "加载中…"
   },
   "login": {
     "heading": "登录",
@@ -51,7 +52,8 @@
     "myProjects": "我的项目",
     "docs": "接入文档",
     "apiDocs": "API 文档",
-    "grants": "我的授权"
+    "grants": "我的授权",
+    "audit": "审计日志"
   },
   "projects": {
     "heading": "我的项目",
@@ -125,7 +127,8 @@
     "pickNamespaceFirst": "请先选择目标命名空间",
     "noMatch": "无匹配结果(或当前不可见)",
     "wholeNamespaceHint": "名称留空 = 订阅整个命名空间(新资源发布时自动收到通知)",
-    "confirmRevoke": "确认退订 {{target}}?"
+    "confirmRevoke": "确认退订 {{target}}?",
+    "pinnedHint": "已锁定在该版本;新版本发布时会收到提示但不会自动升级"
   },
   "settings": {
     "members": "成员管理",
@@ -272,5 +275,17 @@
     "revoke": "收回",
     "empty": "还没有对外授权",
     "confirmRevoke": "确认收回该授权?订阅方将立即失去对受限资源的访问"
+  },
+  "audit": {
+    "title": "审计日志",
+    "subtitle": "谁在什么时候做了什么——平台级,按时间倒序。",
+    "empty": "暂无审计记录。",
+    "when": "时间",
+    "actor": "操作人",
+    "action": "动作",
+    "target": "对象",
+    "detail": "详情",
+    "sourceIp": "来源 IP",
+    "loadMore": "加载更多"
   }
 }
