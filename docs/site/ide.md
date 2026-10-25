@@ -33,6 +33,8 @@ Streamable HTTP:  http://<registry-host>:12122/mcp
 | `registry_overview` | 各 kind 可见资源数量 + 服务版本 |
 | `list_resources` | 按类型/命名空间/关键字列目录(可见性过滤后) |
 | `get_resource` | 取单个资源详情:最新(或指定 tag)的 spec、端点、change_notes、目录元数据 |
+| `list_prompts` | 列出可见的 Prompt 模板(Prompt 项目私有),含已声明变量 |
+| `get_prompt` | 取模板;或带 `variables_json` 服务端渲染(必填/未声明强校验) |
 
 典型用法:在 IDE 里问"注册中心里有哪些支付相关的 MCP 服务?"——客户端调用 `list_resources(search=支付)`,再 `get_resource` 拿到端点与版本,直接接入配置。
 

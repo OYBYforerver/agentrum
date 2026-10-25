@@ -16,6 +16,13 @@
 | `ARK_FEISHU_WEBHOOK_URL/SECRET` | — | Feishu bot notifications |
 | `ARK_NOTIFICATION_WEBHOOK_URL/SECRET` | — | Generic webhook (`X-Agentrum-Signature` header) |
 | `ARK_OIDC_GENERIC_ISSUER/CLIENT_ID/CLIENT_SECRET` | — | Generic OIDC |
+| `ARK_RATELIMIT_BACKEND` | `memory` | `redis` shares login rate limits/lockouts across replicas (needs `agentrum[redis]`; fails open with a warning if Redis is down) |
+| `ARK_RATELIMIT_REDIS_URL` | `redis://localhost:6379/0` | Rate-limit backend address |
+| `ARK_EGRESS_ALLOW_PRIVATE_ADDRESSES` | `true` | Whether server-initiated outbound requests (git fetch, health probes, content delivery) may reach private ranges (internal git servers usually need this) |
+| `ARK_EGRESS_ALLOW_LOOPBACK` | `false` | Dev escape hatch: allow loopback/link-local (includes cloud metadata — refused by default) |
+| `ARK_EGRESS_ALLOW_FILE_SOURCES` | `false` | Dev/test only: allow file:// git sources |
+| `ARK_SKILL_CONTENT_MAX_BYTES` | `52428800` | Size cap for skill content tarballs |
+| `ARK_RESOURCE_RETENTION_DAYS` | `30` | days a soft-deleted resource stays in the recycle bin before the retention prune removes it for good (versions and secret payloads cascade) |
 | `ARK_FEISHU_APP_ID/APP_SECRET` | — | Feishu SSO |
 | `ARK_OIDC_REDIRECT_BASE` / `ARK_UI_ORIGIN` | — | Callback base / UI redirect origin |
 | `ARK_PROBE_INTERVAL_SECONDS` | `60` | MCPServer endpoint probe interval |

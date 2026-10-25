@@ -33,6 +33,8 @@ Give your IDE a read-only (`read` scope) project AK/SK: console → project → 
 | `registry_overview` | visible resource counts per kind + server version |
 | `list_resources` | browse the catalog by kind/namespace/keyword (visibility-filtered) |
 | `get_resource` | one resource: latest (or pinned) spec, endpoint, change notes, catalog metadata |
+| `list_prompts` | prompt templates visible to you (prompts are project-private), with declared variables |
+| `get_prompt` | fetch a template; or render server-side with `variables_json` (required/unknown variables validated) |
 
 Typical flow: ask the IDE "which payment-related MCP servers are in the registry?" — the client calls `list_resources(search=payment)`, then `get_resource` for the endpoint and version, ready to wire into config.
 

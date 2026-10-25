@@ -23,6 +23,7 @@ agentrum get KIND     # 列表;agentrum get KIND NAME -n NS 查看单个(输出 
 agentrum delete KIND ns/name   # 软删除(重新 apply 同名资源即恢复)
 agentrum init KIND NAME        # 脚手架:agent | mcp-server | skill | prompt
 agentrum export -o bundle.yaml # 导出资源(含全部版本)用于跨环境提升
+agentrum configure --client cursor   # 一键把注册中心写进 IDE 的 MCP 配置
 agentrum version      # 服务端版本
 ```
 

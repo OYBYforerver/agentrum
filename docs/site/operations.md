@@ -16,6 +16,13 @@
 | `ARK_FEISHU_WEBHOOK_URL/SECRET` | — | 飞书机器人通知 |
 | `ARK_NOTIFICATION_WEBHOOK_URL/SECRET` | — | 通用 webhook(签名头 `X-Agentrum-Signature`) |
 | `ARK_OIDC_GENERIC_ISSUER/CLIENT_ID/CLIENT_SECRET` | — | 通用 OIDC |
+| `ARK_RATELIMIT_BACKEND` | `memory` | `redis` 时登录限流/失败锁定全局共享(需 `agentrum[redis]`;Redis 故障时 fail-open 并告警) |
+| `ARK_RATELIMIT_REDIS_URL` | `redis://localhost:6379/0` | 限流后端地址 |
+| `ARK_EGRESS_ALLOW_PRIVATE_ADDRESSES` | `true` | 服务端出站(git 拉取/健康探测/内容交付)是否可达私网段(内网 git 服务通常需要) |
+| `ARK_EGRESS_ALLOW_LOOPBACK` | `false` | 开发用:放行 loopback/link-local(含云元数据段,默认拒绝) |
+| `ARK_EGRESS_ALLOW_FILE_SOURCES` | `false` | 开发/测试用:放行 file:// git 源 |
+| `ARK_SKILL_CONTENT_MAX_BYTES` | `52428800` | Skill 内容交付的 tarball 大小上限 |
+| `ARK_RESOURCE_RETENTION_DAYS` | `30` | 软删除资源在回收站保留的天数,过期由保留期清理硬删(版本与 Secret 载荷级联) |
 | `ARK_FEISHU_APP_ID/APP_SECRET` | — | 飞书 SSO |
 | `ARK_OIDC_REDIRECT_BASE` / `ARK_UI_ORIGIN` | — | 回调基址 / UI 跳转地址 |
 | `ARK_PROBE_INTERVAL_SECONDS` | `60` | MCPServer 端点探测周期 |

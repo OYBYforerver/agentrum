@@ -23,6 +23,7 @@ agentrum get KIND     # list; agentrum get KIND NAME -n NS for one (JSON output)
 agentrum delete KIND ns/name   # soft delete (re-applying restores)
 agentrum init KIND NAME        # scaffold: agent | mcp-server | skill | prompt
 agentrum export -o bundle.yaml # export resources (all versions) for promotion
+agentrum configure --client cursor   # write the registry into an IDE MCP config
 agentrum version      # server version
 ```
 

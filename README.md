@@ -61,7 +61,7 @@ open http://localhost:12122/handbook # 内置接入文档
 发布第一个资源:
 
 ```bash
-pip install agentrum                 # 或源码内 uv sync 后 uv run agentrum
+pip install agentrum                 # 或免安装:uvx agentrum …;源码内 uv sync 后 uv run agentrum
 agentrum login --server http://localhost:12122 --username admin
 agentrum init mcp-server payment-gateway && cd payment-gateway
 agentrum apply agentrum.yaml
