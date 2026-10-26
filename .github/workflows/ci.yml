@@ -133,28 +133,29 @@ jobs:
           kubectl -n agentrum rollout status deployment/postgres --timeout=180s
       - name: Helm install agentrum
         run: |
-          helm upgrade --install agentrum charts/agentrum             --namespace agentrum --set image.repository=agentrum/server --set image.tag=e2e             --set image.pullPolicy=Never             --set database.url="postgresql+asyncpg://agentrum:agentrum@postgres.agentrum.svc.cluster.local:5432/agentrum"             --set auth.secretKey=ci-secret-key-at-least-32-chars-long             --set auth.bootstrapAdminPassword=e2e-admin-pass             --set deploy.imageAllowlist="docker.io/library/nginx"             --set deploy.clusterNamespaces="e2e-apps"
+          helm upgrade --install agentrum charts/agentrum             --namespace agentrum --set image.repository=agentrum/server --set image.tag=e2e             --set image.pullPolicy=Never             --set database.url="postgresql+asyncpg://agentrum:agentrum@postgres.agentrum.svc.cluster.local:5432/agentrum"             --set auth.secretKey=ci-secret-key-at-least-32-chars-long             --set auth.bootstrapAdminPassword=e2e-admin-pass             --set secrets.encryptionKey=hrdPFBvRaBlO4e1pJuVEOmYl0w9NisZlBJyuwdruJp0=             --set deploy.imageAllowlist="docker.io/library/nginx:1.27"
           kubectl -n agentrum rollout status deployment/agentrum --timeout=300s
       - name: Publish a Deployment resource and verify reconciliation
         run: |
           kubectl -n agentrum port-forward svc/agentrum 12122:80 >/dev/null 2>&1 &
           for i in $(seq 1 30); do curl -sf http://localhost:12122/healthz && break || sleep 2; done
           TOKEN=$(curl -s -X POST http://localhost:12122/v1/auth/login             -H 'content-type: application/json'             -d '{"username":"admin","password":"e2e-admin-pass"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+          curl -sf -X POST http://localhost:12122/v1/teams             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'             -d '{"name":"e2e"}'
           # Agent + Deployment: allowed image reconciles into the cluster
-          curl -sf -X PUT http://localhost:12122/v1/resources/Agent/e2e/demo             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'             -d '{"spec":{"image":"nginx:1.27"},"tag":"v1"}'
-          curl -sf -X PUT http://localhost:12122/v1/resources/Deployment/e2e/demo-deploy             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'             -d '{"spec":{"target_kind":"Agent","target_namespace":"e2e","target_name":"demo","cluster_namespace":"e2e-apps","port":80},"tag":"v1"}'
+          curl -sf -X PUT http://localhost:12122/v1/resources/Agent/e2e/demo             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'             -d '{"spec":{"image":"docker.io/library/nginx:1.27"},"tag":"v1"}'
+          curl -sf -X PUT http://localhost:12122/v1/resources/Deployment/e2e/demo-deploy             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'             -d '{"spec":{"target_kind":"Agent","target_namespace":"e2e","target_name":"demo","cluster_namespace":"agentrum","port":80},"tag":"v1"}'
           for i in $(seq 1 30); do
             COND=$(curl -s http://localhost:12122/v1/resources/Deployment/e2e/demo-deploy               -H "authorization: Bearer $TOKEN" | python3 -c 'import sys,json;print(json.dumps((json.load(sys.stdin).get("status") or {}).get("conditions",[])))')
             echo "$COND" | grep -q '"True"' && break || sleep 5
           done
           echo "final conditions: $COND"
           echo "$COND" | grep -q '"True"'
-          kubectl -n e2e-apps get deployment e2e-demo
-          kubectl -n e2e-apps get service e2e-demo
+          kubectl -n agentrum get deployment e2e-demo-deploy
+          kubectl -n agentrum get service e2e-demo-deploy
           # Disallowed image is refused by the allowlist
-          curl -sf -X PUT http://localhost:12122/v1/resources/Agent/e2e/evil             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'             -d '{"spec":{"image":"quay.io/evil/evil:latest"},"tag":"v1"}'             && curl -sf -X PUT http://localhost:12122/v1/resources/Deployment/e2e/evil-deploy                -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'                -d '{"spec":{"target_kind":"Agent","target_namespace":"e2e","target_name":"evil","cluster_namespace":"e2e-apps"},"tag":"v1"}'             || echo "evil publish rejected at API level"
+          curl -sf -X PUT http://localhost:12122/v1/resources/Agent/e2e/evil             -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'             -d '{"spec":{"image":"quay.io/evil/evil:latest"},"tag":"v1"}'             && curl -sf -X PUT http://localhost:12122/v1/resources/Deployment/e2e/evil-deploy                -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'                -d '{"spec":{"target_kind":"Agent","target_namespace":"e2e","target_name":"evil","cluster_namespace":"agentrum"},"tag":"v1"}'             || echo "evil publish rejected at API level"
           sleep 15
-          if kubectl -n e2e-apps get deployment e2e-evil >/dev/null 2>&1; then
+          if kubectl -n agentrum get deployment e2e-evil-deploy >/dev/null 2>&1; then
             echo "FAIL: disallowed image reconciled"; exit 1
           fi
 
