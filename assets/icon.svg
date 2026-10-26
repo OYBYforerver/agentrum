@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- A = portal arch + threshold crossbar -->
+  <g fill="none" stroke="#fff" stroke-width="48" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M66 376 L88 246 A112 112 0 0 1 312 246 L334 376"/>
+    <path d="M80 314 L320 314" stroke-linecap="butt"/>
+  </g>
+
+  <!-- hexagon asset core + seal -->
+  <polygon points="200,178 239.8,201 239.8,247 200,270 160.2,247 160.2,201" fill="#fff"/>
+  <circle cx="200" cy="224" r="13" fill="#0EA5E9"/>
+
+  <!-- I -->
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <path d="M429 136 L429 376" stroke-width="48"/>
+    <path d="M412 134 L446 134" stroke-width="44"/>
+    <path d="M412 378 L446 378" stroke-width="44"/>
+  </g>
+</svg>

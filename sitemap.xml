@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    <url>
+        <loc>None./</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="None"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/"/>
+    </url>
+    <url>
+        <loc>Noneapi.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneapi.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/api.en/"/>
+    </url>
+    <url>
+        <loc>Noneapi/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneapi/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/api/"/>
+    </url>
+    <url>
+        <loc>Nonearchitecture/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonearchitecture/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/architecture/"/>
+    </url>
+    <url>
+        <loc>Nonecli.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonecli.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/cli.en/"/>
+    </url>
+    <url>
+        <loc>Nonecli/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonecli/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/cli/"/>
+    </url>
+    <url>
+        <loc>Nonedeploy.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonedeploy.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/deploy.en/"/>
+    </url>
+    <url>
+        <loc>Nonedeploy/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonedeploy/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/deploy/"/>
+    </url>
+    <url>
+        <loc>Noneide.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneide.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/ide.en/"/>
+    </url>
+    <url>
+        <loc>Noneide/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneide/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/ide/"/>
+    </url>
+    <url>
+        <loc>Noneindex.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneindex.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/index.en/"/>
+    </url>
+    <url>
+        <loc>Noneoperations.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneoperations.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/operations.en/"/>
+    </url>
+    <url>
+        <loc>Noneoperations/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneoperations/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/operations/"/>
+    </url>
+    <url>
+        <loc>Nonepermissions.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonepermissions.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/permissions.en/"/>
+    </url>
+    <url>
+        <loc>Nonepermissions/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonepermissions/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/permissions/"/>
+    </url>
+    <url>
+        <loc>Nonequickstart/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonequickstart/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/quickstart/"/>
+    </url>
+    <url>
+        <loc>Noneresources.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneresources.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/resources.en/"/>
+    </url>
+    <url>
+        <loc>Noneresources/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneresources/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/resources/"/>
+    </url>
+    <url>
+        <loc>Noneroadmap/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneroadmap/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/roadmap/"/>
+    </url>
+    <url>
+        <loc>Nonesdk.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesdk.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/sdk.en/"/>
+    </url>
+    <url>
+        <loc>Nonesdk/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesdk/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/sdk/"/>
+    </url>
+    <url>
+        <loc>Nonesso.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesso.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/sso.en/"/>
+    </url>
+    <url>
+        <loc>Nonesso/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesso/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/sso/"/>
+    </url>
+    <url>
+        <loc>Nonesubscribe.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesubscribe.en/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/subscribe.en/"/>
+    </url>
+    <url>
+        <loc>Nonesubscribe/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesubscribe/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/subscribe/"/>
+    </url>
+    <url>
+        <loc>Noneen/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="None"/>
+    </url>
+    <url>
+        <loc>Noneen/api.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/api.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneapi.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/api/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/api/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneapi/"/>
+    </url>
+    <url>
+        <loc>Noneen/architecture/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/architecture/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonearchitecture/"/>
+    </url>
+    <url>
+        <loc>Noneen/cli.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/cli.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonecli.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/cli/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/cli/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonecli/"/>
+    </url>
+    <url>
+        <loc>Noneen/deploy.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/deploy.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonedeploy.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/deploy/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonedeploy/"/>
+    </url>
+    <url>
+        <loc>Noneen/ide.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/ide.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneide.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/ide/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/ide/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneide/"/>
+    </url>
+    <url>
+        <loc>Noneen/index.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/index.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneindex.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/operations.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/operations.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneoperations.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/operations/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/operations/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneoperations/"/>
+    </url>
+    <url>
+        <loc>Noneen/permissions.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/permissions.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonepermissions.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/permissions/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/permissions/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonepermissions/"/>
+    </url>
+    <url>
+        <loc>Noneen/quickstart/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/quickstart/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonequickstart/"/>
+    </url>
+    <url>
+        <loc>Noneen/resources.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/resources.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneresources.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/resources/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/resources/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneresources/"/>
+    </url>
+    <url>
+        <loc>Noneen/roadmap/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/roadmap/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Noneroadmap/"/>
+    </url>
+    <url>
+        <loc>Noneen/sdk.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/sdk.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesdk.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/sdk/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/sdk/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesdk/"/>
+    </url>
+    <url>
+        <loc>Noneen/sso.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/sso.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesso.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/sso/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/sso/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesso/"/>
+    </url>
+    <url>
+        <loc>Noneen/subscribe.en/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/subscribe.en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesubscribe.en/"/>
+    </url>
+    <url>
+        <loc>Noneen/subscribe/</loc>
+        <lastmod>2026-10-26</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="Noneen/subscribe/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="Nonesubscribe/"/>
+    </url>
+</urlset>
