@@ -43,7 +43,8 @@ ENV ARK_UI_DIR=/app/ui-out
 # never run as root
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin agentrum \
     && chown -R agentrum:agentrum /app
-USER agentrum
+# Numeric user: kubelet cannot verify a named user under runAsNonRoot.
+USER 10001:10001
 
 ENV PATH="/app/.venv/bin:$PATH"
 
