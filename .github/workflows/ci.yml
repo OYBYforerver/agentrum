@@ -106,9 +106,6 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.12"
       - name: Install kind + kubectl + Helm
         run: |
           curl -sLo kind "https://github.com/kubernetes-sigs/kind/releases/download/v0.25.0/kind-linux-amd64"
