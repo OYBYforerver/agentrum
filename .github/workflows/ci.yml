@@ -127,7 +127,8 @@ jobs:
       - name: Install in-cluster PostgreSQL
         run: |
           kubectl create ns agentrum
-          kubectl -n agentrum create deployment postgres --image=postgres:16-alpine             --env=POSTGRES_USER=agentrum --env=POSTGRES_PASSWORD=agentrum --env=POSTGRES_DB=agentrum
+          kubectl -n agentrum create deployment postgres --image=postgres:16-alpine
+          kubectl -n agentrum set env deployment/postgres             POSTGRES_USER=agentrum POSTGRES_PASSWORD=agentrum POSTGRES_DB=agentrum
           kubectl -n agentrum expose deployment postgres --port=5432
           kubectl -n agentrum rollout status deployment/postgres --timeout=180s
       - name: Helm install agentrum
