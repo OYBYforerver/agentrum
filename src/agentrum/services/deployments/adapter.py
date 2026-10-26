@@ -119,8 +119,10 @@ class KubernetesAdapter:
 
         from kubernetes_asyncio import config
 
+        # load_incluster_config is synchronous in kubernetes_asyncio; only the
+        # kubeconfig loader is a coroutine.
         if os.environ.get("KUBERNETES_SERVICE_HOST"):
-            await config.load_incluster_config()
+            config.load_incluster_config()
         else:
             await config.load_kube_config()
         self._loaded = True

@@ -10,7 +10,12 @@ import pytest
 from agentrum import errors
 from agentrum.schemas.specs import validate_spec
 from agentrum.services import skill_content_service
-from agentrum.services.deployments.adapter import DeploymentPlan, build_container, build_pod_spec
+from agentrum.services.deployments.adapter import (
+    DeploymentPlan,
+    KubernetesAdapter,
+    build_container,
+    build_pod_spec,
+)
 from agentrum.services.deployments.reconciler import _plan_from
 from agentrum.services.git_service import _socket_timeout
 
@@ -194,3 +199,23 @@ def test_validate_spec_still_rejects_bad_deployment():
         validate_spec(
             "Deployment", {"target_kind": "Skill", "target_namespace": "n", "target_name": "x"}
         )
+
+
+# --- kubernetes adapter config -------------------------------------------------
+
+
+async def test_incluster_config_is_not_awaited(monkeypatch):
+    from kubernetes_asyncio import config as kube_config
+
+    calls: list[str] = []
+
+    async def fake_kube_config(**kwargs):
+        calls.append("kubeconfig")
+
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
+    monkeypatch.setattr(kube_config, "load_incluster_config", lambda: calls.append("incluster"))
+    monkeypatch.setattr(kube_config, "load_kube_config", fake_kube_config)
+
+    await KubernetesAdapter()._ensure_config()
+
+    assert calls == ["incluster"]
